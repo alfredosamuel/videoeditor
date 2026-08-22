@@ -829,6 +829,8 @@
 
   document.getElementById('btnDelete').addEventListener('click', () => {
     if(!selectedClipId) return;
+    const removed = clips.find(c => c.id === selectedClipId);
+    if(removed && removed._pel){ removed._pel.pause(); removed._pel.remove(); }
     clips = clips.filter(c => c.id !== selectedClipId);
     selectedClipId = null;
     renderTimeline(); renderProperties(); updateActionButtons();
@@ -846,7 +848,8 @@
     const second = Object.assign({}, c, {
       id:newId(), start:t, duration:secondDur,
       trimStart: (c.type==='video'||c.type==='audio') ? c.trimStart + firstDur : c.trimStart,
-      transform: c.transform ? Object.assign({}, c.transform) : undefined
+      transform: c.transform ? Object.assign({}, c.transform) : undefined,
+      _pel: null // el trozo nuevo necesita su propio reproductor, no puede compartir el del original
     });
     c.duration = firstDur;
     clips.push(second);
@@ -1046,7 +1049,7 @@
     return { w:canvas.width*0.9, h:canvas.height*0.4 }; // bars / mirror
   }
 
-  function drawVisualClip(clip, m){
+  function drawVisualClip(clip, m, elOverride){
     const bs = getVisualBaseSize(clip);
     if(clip.type==='image' && clip.isDisc){
       const spinDeg = ((playhead - clip.start) * (clip.discRpm||0) / 60) * 360;
@@ -1064,7 +1067,8 @@
         ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = Math.max(1,w*0.012); ctx.stroke();
       }, bs.w, bs.h, t2);
     } else {
-      compositeVisual((w,h) => { ctx.drawImage(m.el, -w/2, -h/2, w, h); }, bs.w, bs.h, clip.transform);
+      const sourceEl = (clip.type==='video' && elOverride) ? elOverride : m.el;
+      compositeVisual((w,h) => { ctx.drawImage(sourceEl, -w/2, -h/2, w, h); }, bs.w, bs.h, clip.transform);
     }
   }
 
@@ -1266,25 +1270,69 @@
 
   const allMediaEls = () => mediaLibrary.filter(m=>m.type!=='image').map(m=>m.el);
 
+  /* ---------------- Reproducción: un elemento propio por clip ----------------
+     Antes, todos los clips que apuntaban al mismo archivo compartían el mismo
+     <video>/<audio> de fondo. Al pasar de un clip a otro (aunque fuera el
+     mismo archivo repetido), ese único elemento tenía que saltar (seek) de
+     golpe a la nueva posición, y ese salto tarda unos cientos de ms en
+     decodificar -> el fotograma negro que se ve entre clips.
+     Ahora cada clip de la línea de tiempo tiene su propio elemento dedicado
+     (clonado del mismo archivo), así nunca compite por la misma posición de
+     reproducción y no hace falta saltar en el momento del corte. */
+  function getClipPlaybackEl(clip, m){
+    if(clip._pel) return clip._pel;
+    const el = document.createElement(m.type === 'video' ? 'video' : 'audio');
+    el.src = m.url;
+    el.preload = 'auto';
+    el.playsInline = true;
+    el.muted = false;
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    attachAudioGraph(el);
+    clip._pel = el;
+    return el;
+  }
+
+  const LOOKAHEAD_SECONDS = 0.6;
+  function prewarmUpcomingClips(){
+    ['video','audio'].forEach(track => {
+      clipsOnTrack(track).forEach(c => {
+        if(c.start > playhead && c.start - playhead <= LOOKAHEAD_SECONDS){
+          const m = mediaLibrary.find(mm => mm.id === c.mediaId);
+          if(m && m.type !== 'image'){
+            const el = getClipPlaybackEl(c, m);
+            // deja el elemento ya posicionado y "calentado" antes de que le toque salir
+            if(el.readyState >= 1 && el.paused && Math.abs(el.currentTime - c.trimStart) > 0.05){
+              try{ el.currentTime = c.trimStart; }catch(e){}
+            }
+          }
+        }
+      });
+    });
+  }
+
   function renderPreviewFrame(){
     const w = canvas.width, h = canvas.height;
     ctx.fillStyle = '#000';
     ctx.fillRect(0,0,w,h);
 
+    prewarmUpcomingClips();
+
     const activeVideo = activeClip('video', playhead);
     const activeAudio = activeClip('audio', playhead);
     const activeText = activeClip('text', playhead);
 
-    const activeIds = new Set();
+    const activeEls = new Set();
 
     if(activeVideo){
       const m = mediaLibrary.find(mm=>mm.id===activeVideo.mediaId);
       if(m){
         if(m.type==='video'){
+          const el = getClipPlaybackEl(activeVideo, m);
           const desired = activeVideo.trimStart + (playhead - activeVideo.start);
-          syncMediaEl(m.el, desired, isPlaying);
-          activeIds.add(m.id);
-          if(m.el.readyState >= 2) drawVisualClip(activeVideo, m);
+          syncMediaEl(el, desired, isPlaying);
+          activeEls.add(el);
+          if(el.readyState >= 2) drawVisualClip(activeVideo, m, el);
         } else if(m.type==='image'){
           drawVisualClip(activeVideo, m);
         }
@@ -1293,14 +1341,15 @@
     if(activeAudio){
       const m = mediaLibrary.find(mm=>mm.id===activeAudio.mediaId);
       if(m){
+        const el = getClipPlaybackEl(activeAudio, m);
         const desired = activeAudio.trimStart + (playhead - activeAudio.start);
-        syncMediaEl(m.el, desired, isPlaying);
-        activeIds.add(m.id);
+        syncMediaEl(el, desired, isPlaying);
+        activeEls.add(el);
       }
     }
-    // pause all other media
-    mediaLibrary.forEach(m => {
-      if(m.type!=='image' && !activeIds.has(m.id) && m.el && !m.el.paused) m.el.pause();
+    // pausa cualquier elemento de clip que no esté activo ahora mismo
+    clips.forEach(c => {
+      if(c._pel && !activeEls.has(c._pel) && !c._pel.paused) c._pel.pause();
     });
 
     if(activeText){
@@ -1345,6 +1394,7 @@
         document.getElementById('btnPlayPause').textContent = '▶';
         document.getElementById('playOverlayBtn').textContent = '▶';
         allMediaEls().forEach(el => el && el.pause());
+        clips.forEach(c => { if(c._pel && !c._pel.paused) c._pel.pause(); });
       }
       positionPlayhead();
     }
