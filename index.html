@@ -235,6 +235,11 @@
         <div id="mediaList"></div>
       </div>
 
+      <div class="side-section" style="flex:1;">
+        <h3>Propiedades</h3>
+        <div id="propertiesPanel"><div class="empty">Selecciona un clip en la línea de tiempo para editarlo.</div></div>
+      </div>
+
       <div class="side-section">
         <h3>Espectrómetro de audio</h3>
         <div class="field">
@@ -282,11 +287,6 @@
           Arrastra un .lrc / .srt aquí<br>o haz clic para elegir archivo
         </div>
         <input type="file" id="lyricsInput" accept=".lrc,.srt,.txt" style="display:none;">
-      </div>
-
-      <div class="side-section" style="flex:1;">
-        <h3>Propiedades</h3>
-        <div id="propertiesPanel"><div class="empty">Selecciona un clip en la línea de tiempo para editarlo.</div></div>
       </div>
     </aside>
 
@@ -1106,6 +1106,15 @@
     renderPreviewFrame();
   }
 
+  /* ---- Preview de recorte: mueve el cabezal al borde que se está arrastrando,
+     sin tocar el límite superior de la duración total (por eso no usa seekTo). ---- */
+  function previewSeek(t){
+    playhead = Math.max(0, t);
+    positionPlayhead();
+    renderPreviewFrame();
+    updateSelectionOverlay();
+  }
+
   /* ---- Clip dragging (move / trim) ---- */
   function attachClipDrag(el, clip){
     el.addEventListener('mousedown', e => {
@@ -1118,6 +1127,7 @@
 
       const startX = e.clientX;
       const orig = { start:clip.start, duration:clip.duration, trimStart:clip.trimStart };
+      const origPlayhead = playhead;
       const mediaItem = clip.mediaId ? mediaLibrary.find(m=>m.id===clip.mediaId) : null;
       const maxDur = mediaItem && clip.type!=='image' ? mediaItem.naturalDuration : 999;
       const groupType = (clip.type==='video'||clip.type==='image') ? 'video' : clip.type;
@@ -1155,11 +1165,13 @@
           el.style.left = (ns*pixelsPerSecond)+'px';
           el.style.width = Math.max(4,nd*pixelsPerSecond)+'px';
           clip._tempStart = ns; clip._tempDur = nd; clip._tempTrim = nts;
+          previewSeek(ns);
         } else if(mode === 'trim-right'){
           let nd = Math.max(0.2, orig.duration + dt);
           if(mediaItem && clip.type!=='image') nd = Math.min(nd, maxDur - orig.trimStart);
           el.style.width = Math.max(4,nd*pixelsPerSecond)+'px';
           clip._tempDur = nd;
+          previewSeek(orig.start + nd);
         }
       }
       function onUp(){
@@ -1175,8 +1187,14 @@
           clip.start = ns; clip.duration = nd; clip.trimStart = nts; clip.track = nTrack;
           pushHistory();
         }
+        if(mode === 'trim-left' || mode === 'trim-right'){
+          playhead = origPlayhead;
+          positionPlayhead();
+        }
         renderTimeline();
         renderProperties();
+        renderPreviewFrame();
+        updateSelectionOverlay();
       }
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
@@ -1287,8 +1305,8 @@
      frecuencias altas. Esta tabla de refuerzo (en dB relativos a 1kHz) compensa
      ambos efectos para que las barras de agudos dejen de verse planas. */
   const HEARING_CURVE_DB = [
-    [20,55],[50,35],[100,19],[200,10],[500,3],[1000,0],[2000,-3],[3000,-6],
-    [4000,-5],[5000,-2],[6300,0],[8000,3],[10000,8],[12500,15],[16000,25],[20000,35]
+    [20,0],[50,0],[100,0],[200,0],[500,0],[1000,0],[2000,0],[3000,2],
+    [4000,4],[5000,6],[6300,8],[8000,10],[10000,13],[12500,16],[16000,20],[20000,24]
   ];
   function hearingCompensationGain(freq){
     const table = HEARING_CURVE_DB;
