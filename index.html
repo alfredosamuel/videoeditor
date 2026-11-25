@@ -187,6 +187,11 @@
   .sel-box .handle-edge.e,.sel-box .handle-edge.w{top:50%;height:24px;width:8px;margin-top:-12px;cursor:ew-resize;}
   .sel-box .handle-edge.e{right:-4px;} .sel-box .handle-edge.w{left:-4px;}
   .sel-box.no-edges .handle-edge{display:none;}
+
+  /* Guías del imán al mover en el lienzo */
+  .snap-guide{position:absolute;background:var(--accent);opacity:.9;pointer-events:none;display:none;}
+  .snap-guide.v{top:0;bottom:0;width:1px;margin-left:-.5px;}
+  .snap-guide.h{left:0;right:0;height:1px;margin-top:-.5px;}
 </style>
 </head>
 <body>
@@ -314,6 +319,8 @@
         <canvas id="previewCanvas" width="1280" height="720"></canvas>
         <button id="playOverlayBtn">▶</button>
         <div id="canvasOverlay">
+          <div id="guideV" class="snap-guide v"></div>
+          <div id="guideH" class="snap-guide h"></div>
           <div id="selBox" class="sel-box hidden">
             <div class="rotate-line"></div>
             <div class="handle-rotate"></div>
@@ -1704,6 +1711,56 @@
     });
   }
 
+  /* ---- Imán suave al mover en el lienzo ----
+     Al arrastrar, los bordes y el centro del elemento se "pegan" a: bordes del lienzo, su centro,
+     los tercios, y bordes/centros de los demás elementos visibles. Cerca de un punto el elemento
+     frena de forma progresiva (sin saltos) y se ve una guía. Mantén Alt para mover sin imán. */
+  const SNAP_PX = 12;   // alcance del imán en píxeles de pantalla
+  function snapItems(){
+    const list = [];
+    const add = (sel, t, bw, bh, rot) => {
+      const w = bw*t.scale*(t.scaleX||1), h = bh*t.scale*(t.scaleY||1);
+      const th = rot*Math.PI/180, c = Math.abs(Math.cos(th)), sn = Math.abs(Math.sin(th));
+      list.push({ sel, cx:t.x*canvas.width, cy:t.y*canvas.height, hw:(w*c + h*sn)/2, hh:(w*sn + h*c)/2 });
+    };
+    clips.forEach(c => {
+      if((c.type==='video' || c.type==='image') && isClipActive(c)){
+        const bs = getVisualBaseSize(c);
+        add(!!canvasSelection && canvasSelection.type==='clip' && canvasSelection.id===c.id, c.transform, bs.w, bs.h, c.isDisc ? 0 : c.transform.rotation);
+      }
+    });
+    if(document.getElementById('spectrumEnabled').checked){
+      const bs = getSpectrumBaseSize(document.getElementById('spectrumStyle').value);
+      add(!!canvasSelection && canvasSelection.type==='spectrum', spectrumTransform, bs.w, bs.h, spectrumTransform.rotation);
+    }
+    return list;
+  }
+  function buildSnap(){
+    const items = snapItems(), me = items.find(i => i.sel);
+    if(!me) return null;
+    const W = canvas.width, H = canvas.height;
+    const X = [0, W/3, W/2, W*2/3, W], Y = [0, H/3, H/2, H*2/3, H];
+    items.forEach(i => { if(i.sel) return; X.push(i.cx-i.hw, i.cx, i.cx+i.hw); Y.push(i.cy-i.hh, i.cy, i.cy+i.hh); });
+    return { hw:me.hw, hh:me.hh, X, Y };
+  }
+  // feats: posiciones de borde/centro respecto al centro del elemento. T: alcance (px del lienzo)
+  function softSnap(pos, feats, targets, T){
+    let best = null;
+    for(const f of feats) for(const t of targets){
+      const d = (pos + f) - t;
+      if(Math.abs(d) < T && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, t };
+    }
+    if(!best) return { pos, line:null };
+    const a = Math.abs(best.d), eff = Math.sign(best.d)*a*a*a/(T*T);   // curva suave: casi pegado cerca, sin saltos
+    return { pos: pos - best.d + eff, line: a < T*0.4 ? best.t : null };
+  }
+  function showGuides(gx, gy){
+    const r = canvas.clientWidth / canvas.width;
+    const v = document.getElementById('guideV'), h = document.getElementById('guideH');
+    v.style.display = gx == null ? 'none' : 'block'; if(gx != null) v.style.left = (gx*r) + 'px';
+    h.style.display = gy == null ? 'none' : 'block'; if(gy != null) h.style.top = (gy*r) + 'px';
+  }
+
   function startBoxDrag(mode, e){
     const transform = getCurrentTransformTarget();
     if(!transform) return;
@@ -1716,13 +1773,21 @@
     const centerClientY = rect.top + transform.y*canvas.height*ratio;
     const d0 = Math.hypot(e.clientX-centerClientX, e.clientY-centerClientY) || 1;
     const startX = e.clientX, startY = e.clientY;
+    const snap = mode === 'move' ? buildSnap() : null;
 
     function onMove(ev){
       if(mode === 'move'){
-        const dxFrac = ((ev.clientX-startX)/ratio)/canvas.width;
-        const dyFrac = ((ev.clientY-startY)/ratio)/canvas.height;
-        transform.x = orig.x + dxFrac;
-        transform.y = orig.y + dyFrac;
+        let nx = orig.x*canvas.width  + (ev.clientX-startX)/ratio;
+        let ny = orig.y*canvas.height + (ev.clientY-startY)/ratio;
+        let gx = null, gy = null;
+        if(snap && !ev.altKey){
+          const T = SNAP_PX/ratio;
+          const sx = softSnap(nx, [-snap.hw, 0, snap.hw], snap.X, T);
+          const sy = softSnap(ny, [-snap.hh, 0, snap.hh], snap.Y, T);
+          nx = sx.pos; ny = sy.pos; gx = sx.line; gy = sy.line;
+        }
+        showGuides(gx, gy);
+        transform.x = nx/canvas.width; transform.y = ny/canvas.height;
       } else if(mode === 'resize'){
         const d1 = Math.hypot(ev.clientX-centerClientX, ev.clientY-centerClientY) || 1;
         transform.scale = Math.max(0.05, orig.scale*(d1/d0));
@@ -1752,6 +1817,7 @@
     function onUp(){
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      showGuides(null, null);
       renderProperties();
       updateSelectionOverlay();
     }
