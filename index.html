@@ -107,7 +107,7 @@
   .transport button{width:38px;height:38px;border-radius:50%;font-size:15px;display:flex;align-items:center;justify-content:center;}
 
   /* Timeline */
-  #timelineSection{flex-shrink:0;height:280px;background:var(--panel);border-top:1px solid var(--line);
+  #timelineSection{flex-shrink:0;height:320px;background:var(--panel);border-top:1px solid var(--line);
     display:flex;flex-direction:column;}
   #timelineTop{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line);}
   #timelineTop .group{display:flex;gap:6px;align-items:center;}
@@ -117,20 +117,8 @@
   #trackLabels{width:120px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);
     display:flex;flex-direction:column;}
   #trackLabels .ruler-spacer{height:26px;border-bottom:1px solid var(--line);flex-shrink:0;}
-  .track-label{height:64px;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 10px;font-size:12px;color:var(--muted);
+  .track-label{height:64px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);
     border-bottom:1px solid var(--line);flex-shrink:0;}
-  .track-label .del-track{padding:2px 6px;font-size:11px;line-height:1;flex-shrink:0;}
-  .track-label .drag-handle{cursor:grab;color:var(--muted);font-size:14px;padding:0 2px;flex-shrink:0;}
-  .track-label .track-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .track-label.drag-over{outline:1.5px dashed var(--accent);outline-offset:-2px;}
-  .track-label.track-disabled-label{opacity:.55;}
-  .track-row.track-disabled{opacity:.35;}
-  .track-switch{position:relative;display:inline-block;width:28px;height:16px;flex-shrink:0;}
-  .track-switch input{opacity:0;width:0;height:0;position:absolute;}
-  .track-switch .switch-slider{position:absolute;inset:0;background:var(--line);border-radius:16px;transition:.15s;cursor:pointer;}
-  .track-switch .switch-slider::before{content:'';position:absolute;width:12px;height:12px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.15s;}
-  .track-switch input:checked + .switch-slider{background:var(--accent);}
-  .track-switch input:checked + .switch-slider::before{transform:translateX(12px);}
 
   #timelineScroll{flex:1;overflow:auto;position:relative;}
   #timelineInner{position:relative;height:100%;}
@@ -169,9 +157,6 @@
 
   /* Canvas transform overlay */
   #canvasOverlay{position:absolute;inset:0;pointer-events:none;z-index:6;}
-  .snap-guide{position:absolute;background:var(--accent2);pointer-events:none;z-index:7;box-shadow:0 0 4px rgba(255,159,90,.7);}
-  .snap-guide.v{width:1px;top:0;bottom:0;}
-  .snap-guide.h{height:1px;left:0;right:0;}
   .sel-box{position:absolute;border:1.5px dashed var(--accent);box-sizing:border-box;}
   .sel-box .sel-body{position:absolute;inset:0;cursor:move;pointer-events:auto;background:rgba(79,209,197,.03);}
   .sel-box .handle-corner{position:absolute;width:12px;height:12px;background:var(--accent);
@@ -184,6 +169,24 @@
   .sel-box .handle-rotate{position:absolute;top:-38px;left:50%;transform:translateX(-50%);
     width:14px;height:14px;border-radius:50%;background:var(--accent2);border:1px solid #0b1210;
     pointer-events:auto;cursor:grab;z-index:2;}
+
+  /* Pistas dinámicas */
+  #trackLabels{overflow:hidden;}
+  #trackLabels .ruler-spacer{position:sticky;top:0;z-index:6;background:var(--panel);}
+  #timelineInner{height:auto;min-height:100%;}
+  .track-label{justify-content:space-between;gap:6px;cursor:pointer;}
+  .track-label.target{box-shadow:inset 3px 0 0 var(--accent);color:var(--text);}
+  .track-label .tl-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .track-label .tl-del{padding:0 6px;font-size:14px;line-height:1.3;flex-shrink:0;}
+  .clip .env-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+
+  /* Tiradores de borde (estirar ancho / alto del espectrómetro) */
+  .sel-box .handle-edge{position:absolute;background:var(--accent);border:1px solid #0b1210;border-radius:3px;pointer-events:auto;z-index:2;}
+  .sel-box .handle-edge.n,.sel-box .handle-edge.s{left:50%;width:24px;height:8px;margin-left:-12px;cursor:ns-resize;}
+  .sel-box .handle-edge.n{top:-4px;} .sel-box .handle-edge.s{bottom:-4px;}
+  .sel-box .handle-edge.e,.sel-box .handle-edge.w{top:50%;height:24px;width:8px;margin-top:-12px;cursor:ew-resize;}
+  .sel-box .handle-edge.e{right:-4px;} .sel-box .handle-edge.w{left:-4px;}
+  .sel-box.no-edges .handle-edge{display:none;}
 </style>
 </head>
 <body>
@@ -235,11 +238,6 @@
         <div id="mediaList"></div>
       </div>
 
-      <div class="side-section" style="flex:1;">
-        <h3>Propiedades</h3>
-        <div id="propertiesPanel"><div class="empty">Selecciona un clip en la línea de tiempo para editarlo.</div></div>
-      </div>
-
       <div class="side-section">
         <h3>Espectrómetro de audio</h3>
         <div class="field">
@@ -250,9 +248,17 @@
             <label>Estilo</label>
             <select id="spectrumStyle">
               <option value="bars">Barras</option>
+              <option value="thin">Barras finas</option>
+              <option value="rounded">Barras redondeadas</option>
+              <option value="led">LED por segmentos</option>
+              <option value="dots">Puntos</option>
               <option value="mirror">Barras espejo</option>
-              <option value="wave">Onda</option>
-              <option value="circular">Circular</option>
+              <option value="smooth">Onda grande</option>
+              <option value="smoothmirror">Onda grande espejo</option>
+              <option value="line">Línea</option>
+              <option value="wave">Osciloscopio</option>
+              <option value="circular">Circular barras</option>
+              <option value="circwave">Circular onda</option>
             </select>
           </div>
           <div class="field" style="max-width:60px;">
@@ -267,6 +273,10 @@
         <div class="field-row">
           <div class="field"><label>Tamaño (%)</label><input type="range" id="s-tscale" min="10" max="300" value="100"></div>
           <div class="field"><label>Rotación (°)</label><input type="number" id="s-trot" min="-180" max="180" value="0"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Ancho (%)</label><input type="range" id="s-tsx" min="10" max="400" value="100"></div>
+          <div class="field"><label>Alto (%)</label><input type="range" id="s-tsy" min="10" max="400" value="100"></div>
         </div>
         <div class="field"><label>Transparencia (%)</label><input type="range" id="s-topacity" min="0" max="100" value="100"></div>
         <div class="field">
@@ -288,6 +298,11 @@
         </div>
         <input type="file" id="lyricsInput" accept=".lrc,.srt,.txt" style="display:none;">
       </div>
+
+      <div class="side-section" style="flex:1;">
+        <h3>Propiedades</h3>
+        <div id="propertiesPanel"><div class="empty">Selecciona un clip en la línea de tiempo para editarlo.</div></div>
+      </div>
     </aside>
 
     <section id="previewWrap">
@@ -295,8 +310,6 @@
         <canvas id="previewCanvas" width="1280" height="720"></canvas>
         <button id="playOverlayBtn">▶</button>
         <div id="canvasOverlay">
-          <div id="guideV" class="snap-guide v hidden"></div>
-          <div id="guideH" class="snap-guide h hidden"></div>
           <div id="selBox" class="sel-box hidden">
             <div class="rotate-line"></div>
             <div class="handle-rotate"></div>
@@ -305,6 +318,10 @@
             <div class="handle-corner ne"></div>
             <div class="handle-corner sw"></div>
             <div class="handle-corner se"></div>
+            <div class="handle-edge n" data-edge="n" title="Estirar alto"></div>
+            <div class="handle-edge s" data-edge="s" title="Estirar alto"></div>
+            <div class="handle-edge e" data-edge="e" title="Estirar ancho"></div>
+            <div class="handle-edge w" data-edge="w" title="Estirar ancho"></div>
           </div>
         </div>
       </div>
@@ -324,23 +341,13 @@
         <button id="zoomIn" class="zoom-btn">+</button>
       </div>
       <div class="sep"></div>
-      <div class="group">
-        <button id="btnAddTrackVideo" title="Añadir pista de vídeo/imagen">➕🎬</button>
-        <button id="btnAddTrackText" title="Añadir pista de texto">➕🔤</button>
-        <button id="btnAddTrackAudio" title="Añadir pista de audio">➕🔊</button>
-      </div>
+      <button id="btnAddVisualTrack" title="Añade una capa nueva encima de las demás">+ Capa imagen/vídeo</button>
+      <button id="btnAddAudioTrack">+ Capa audio</button>
       <div class="sep"></div>
-      <div class="group">
-        <button id="btnUndo" title="Deshacer (Ctrl+Z)">↶</button>
-        <button id="btnRedo" title="Rehacer (Ctrl+Alt+Z)">↷</button>
-      </div>
-      <div class="sep"></div>
-      <span style="font-size:11.5px;color:var(--muted);">Clic en la regla para mover el cabezal · arrastra los clips (también entre pistas) para moverlos, superponerlos o recortarlos</span>
+      <span style="font-size:11.5px;color:var(--muted);">Clic en la regla para mover el cabezal · arrastra los clips para moverlos, recortarlos o cambiarlos de capa · clic en el nombre de una pista para elegirla al añadir medios</span>
     </div>
     <div id="timelineBody">
-      <div id="trackLabels">
-        <div class="ruler-spacer"></div>
-      </div>
+      <div id="trackLabels"></div>
       <div id="timelineScroll">
         <div id="timelineInner">
           <div id="ruler"></div>
@@ -363,45 +370,30 @@
   const mediaLibrary = [];   // {id,type,name,url,el,naturalDuration,width,height}
   let clips = [];            // {id,type,track,mediaId,name,start,duration,trimStart,
                               //  text,color,fontSize,fontFamily,position}
-
-  // Pistas: varias por grupo (video/imagen, texto, audio) -> permite superponer clips.
-  const TRACK_LABEL = {video:'🎬 Vídeo/Imagen', text:'🔤 Texto', audio:'🔊 Audio'};
-  let trackCounters = {video:0, text:0, audio:0};
-  let trackDefs = [];        // {key,type,label}
-  function addTrack(type, silent){
-    trackCounters[type]++;
-    const key = type + '-' + trackCounters[type];
-    trackDefs.push({ key, type, label: TRACK_LABEL[type] + ' ' + trackCounters[type], enabled:true });
-    renderTrackStructure();
-    if(!silent) pushHistory();
-    return key;
-  }
-  function removeTrack(key){
-    if(trackDefs.filter(t=>t.type===trackDefs.find(td=>td.key===key).type).length <= 1) return; // deja al menos 1
-    clips = clips.filter(c => c.track !== key);
-    trackDefs = trackDefs.filter(t => t.key !== key);
-    if(selectedClipId && !clips.some(c=>c.id===selectedClipId)) selectedClipId = null;
-    renderTrackStructure();
-    renderTimeline(); renderProperties(); updateActionButtons();
-    pushHistory();
-  }
-  function moveTrack(srcKey, targetKey){
-    if(!srcKey || srcKey === targetKey) return;
-    const srcIdx = trackDefs.findIndex(t=>t.key===srcKey);
-    const tgtIdx = trackDefs.findIndex(t=>t.key===targetKey);
-    if(srcIdx<0 || tgtIdx<0) return;
-    const [item] = trackDefs.splice(srcIdx,1);
-    trackDefs.splice(tgtIdx,0,item);
-    renderTrackStructure();
-    renderTimeline();
-    pushHistory();
-  }
-  function tracksOfType(type){ return trackDefs.filter(t => t.type === type); }
-  function firstTrackOfType(type){ return tracksOfType(type)[0].key; }
-
   let selectedClipId = null;
   let canvasSelection = null; // {type:'clip', id} | {type:'spectrum'} | null
-  const spectrumTransform = { x:0.5, y:0.8, scale:1, rotation:0, opacity:1 };
+  const spectrumTransform = { x:0.5, y:0.8, scale:1, scaleX:1, scaleY:1, rotation:0, opacity:1 };
+
+  /* ---------------- Pistas (capas) dinámicas ----------------
+     El orden del array es el orden en pantalla (arriba → abajo).
+     Entre las pistas visuales, la de más arriba se dibuja delante. */
+  let tracks = [
+    { id:'video', kind:'visual', name:'Capa 1' },
+    { id:'text',  kind:'text',   name:'Texto' },
+    { id:'audio', kind:'audio',  name:'Audio 1' }
+  ];
+  const trackCounter = { visual:1, audio:1 };
+  const targetTrack = { visual:'video', audio:'audio' }; // pista donde "+" añade los medios
+  const TRACK_ICONS = { visual:'🎬', text:'🔤', audio:'🔊' };
+  const getTrack = id => tracks.find(t => t.id === id) || null;
+  const tracksOfKind = kind => tracks.filter(t => t.kind === kind);
+  const trackKindOf = clip => clip.type==='text' ? 'text' : (clip.type==='audio' ? 'audio' : 'visual');
+
+  /* ---------------- Automatización de volumen ----------------
+     La curva de cada clip de audio se guarda en tiempo del ARCHIVO (no de la
+     línea de tiempo): así sobrevive intacta a mover, recortar o cortar el clip. */
+  const ENV_MAX = 1.5; // la curva llega hasta 150 %
+  let envEditor = null;
 
   let playhead = 0;          // seconds
   let isPlaying = false;
@@ -441,8 +433,10 @@
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 1024;
-    analyser.smoothingTimeConstant = 0.75;
+    analyser.fftSize = 4096;            // más resolución en graves
+    analyser.smoothingTimeConstant = 0.8;
+    analyser.minDecibels = -90;         // rango dinámico más amplio (antes -100..-30)
+    analyser.maxDecibels = -15;         // da headroom: los graves fuertes ya no pegan en el techo
     freqData = new Uint8Array(analyser.frequencyBinCount);
     timeData = new Uint8Array(analyser.fftSize);
     masterGain.connect(analyser);
@@ -454,7 +448,9 @@
     if(el._connected) return;
     try{
       const src = audioCtx.createMediaElementSource(el);
-      src.connect(masterGain);
+      const g = audioCtx.createGain();   // volumen propio de cada clip (automatizable)
+      src.connect(g); g.connect(masterGain);
+      el._gain = g;
       el._connected = true;
     }catch(e){ /* already connected elsewhere, ignore */ }
   }
@@ -483,6 +479,64 @@
       if(t >= c.start - 1e-6 && t < c.start + c.duration - 1e-6) return c;
     }
     return null;
+  }
+
+  function isClipActive(c){
+    return playhead >= c.start - 1e-6 && playhead < c.start + c.duration - 1e-6;
+  }
+
+  function envelopeValue(env, t){
+    const n = env.length;
+    if(t <= env[0].t) return env[0].v;
+    if(t >= env[n-1].t) return env[n-1].v;
+    for(let i=0;i<n-1;i++){
+      const a = env[i], b = env[i+1];
+      if(t >= a.t && t <= b.t){
+        const k = (t - a.t) / Math.max(1e-6, b.t - a.t);
+        return a.v + (b.v - a.v)*k;
+      }
+    }
+    return env[n-1].v;
+  }
+
+  function clipGainAt(clip, timelineTime){
+    if(clip.autoVol && clip.envelope && clip.envelope.length){
+      return envelopeValue(clip.envelope, clip.trimStart + (timelineTime - clip.start));
+    }
+    return clip.volume == null ? 1 : clip.volume;
+  }
+
+  function applyClipGain(clip, el, t){
+    if(!el || !el._gain || !audioCtx) return;
+    const g = Math.max(0, clipGainAt(clip, t === undefined ? playhead : t));
+    if(!el._gainInit){ el._gain.gain.value = g; el._gainInit = true; }   // sin "golpe" al empezar
+    else el._gain.gain.setTargetAtTime(g, audioCtx.currentTime, 0.015);  // suaviza para evitar clics
+  }
+
+  function addTrack(kind){
+    trackCounter[kind]++;
+    const tr = { id:'trk' + newId(), kind, name:(kind==='visual' ? 'Capa ' : 'Audio ') + trackCounter[kind] };
+    if(kind === 'visual'){
+      tracks.splice(tracks.findIndex(t => t.kind==='visual'), 0, tr);   // arriba del todo = delante
+    } else {
+      let last = -1; tracks.forEach((t,i) => { if(t.kind==='audio') last = i; });
+      tracks.splice(last+1, 0, tr);
+    }
+    targetTrack[kind] = tr.id;
+    renderTimeline();
+  }
+
+  function removeTrack(id){
+    const tr = getTrack(id);
+    if(!tr || tr.kind==='text' || tracksOfKind(tr.kind).length <= 1) return;
+    const inTrack = clips.filter(c => c.track === id);
+    if(inTrack.length && !confirm('Esta pista tiene ' + inTrack.length + ' clip(s). ¿Eliminarla junto con sus clips?')) return;
+    inTrack.forEach(c => { if(c._pel){ c._pel.pause(); c._pel.remove(); } });
+    clips = clips.filter(c => c.track !== id);
+    tracks = tracks.filter(t => t.id !== id);
+    if(targetTrack[tr.kind] === id) targetTrack[tr.kind] = tracksOfKind(tr.kind)[0].id;
+    if(selectedClipId && !clips.some(c => c.id === selectedClipId)){ selectedClipId = null; canvasSelection = null; }
+    renderTimeline(); renderProperties(); updateActionButtons(); updateSelectionOverlay();
   }
 
   function overlaps(track, start, duration, excludeId){
@@ -668,7 +722,9 @@
   }
 
   function addMediaToTimeline(m){
-    const track = firstTrackOfType(m.type === 'audio' ? 'audio' : 'video');
+    const kind = m.type === 'audio' ? 'audio' : 'visual';
+    let track = targetTrack[kind];
+    if(!getTrack(track)) track = tracksOfKind(kind)[0].id;
     const list = clipsOnTrack(track);
     const start = list.length ? list[list.length-1].start + list[list.length-1].duration : 0;
     const duration = m.type === 'image' ? 5 : m.naturalDuration;
@@ -678,41 +734,25 @@
       transform: { x:0.5, y:0.5, scale:1, rotation:0, opacity:1 },
       isDisc:false, discRpm:20
     };
+    if(m.type === 'audio'){ clip.volume = 1; clip.autoVol = false; clip.envelope = []; }
     clips.push(clip);
     selectClip(clip.id);
     renderTimeline();
-    pushHistory();
   }
 
   /* ---------------- Text clips ---------------- */
-  const FONT_OPTIONS = [
-    { value:'Segoe UI, sans-serif', label:'Segoe UI' },
-    { value:'Arial, sans-serif', label:'Arial' },
-    { value:'Georgia, serif', label:'Georgia' },
-    { value:'"Times New Roman", serif', label:'Times New Roman' },
-    { value:'"Courier New", monospace', label:'Courier New' },
-    { value:'Verdana, sans-serif', label:'Verdana' },
-    { value:'"Trebuchet MS", sans-serif', label:'Trebuchet MS' },
-    { value:'Impact, sans-serif', label:'Impact' },
-    { value:'"Comic Sans MS", cursive', label:'Comic Sans MS' },
-    { value:'"Brush Script MT", cursive', label:'Brush Script MT' },
-  ];
-
   document.getElementById('btnAddText').addEventListener('click', () => {
-    const track = firstTrackOfType('text');
-    const list = clipsOnTrack(track);
+    const list = clipsOnTrack('text');
     const start = list.length ? list[list.length-1].start + list[list.length-1].duration : 0;
     const clip = {
-      id:newId(), type:'text', track, mediaId:null, name:'Texto',
+      id:newId(), type:'text', track:'text', mediaId:null, name:'Texto',
       start, duration:3, trimStart:0,
       text:'Texto de ejemplo', color:'#ffffff', fontSize:48,
-      fontFamily:FONT_OPTIONS[0].value,
-      transform: { x:0.5, y:0.88, scale:1, rotation:0, opacity:1 }
+      fontFamily:'Segoe UI, sans-serif', position:'bottom'
     };
     clips.push(clip);
     selectClip(clip.id);
     renderTimeline();
-    pushHistory();
   });
 
   /* ---------------- Letra / subtítulos con timestamps (.lrc / .srt) ---------------- */
@@ -776,20 +816,17 @@
           const nextStart = next ? (next.start !== undefined ? next.start : next.time) : start + 3;
           duration = Math.max(0.6, nextStart - start);
         }
-        const textTrack = firstTrackOfType('text');
-        if(overlaps(textTrack, start, duration, null)){ skipped++; return; }
+        if(overlaps('text', start, duration, null)){ skipped++; return; }
         clips.push({
-          id:newId(), type:'text', track:textTrack, mediaId:null, name:'Letra',
+          id:newId(), type:'text', track:'text', mediaId:null, name:'Letra',
           start, duration, trimStart:0,
           text:e.text, color:'#ffffff', fontSize:44,
-          fontFamily:FONT_OPTIONS[0].value,
-          transform: { x:0.5, y:0.88, scale:1, rotation:0, opacity:1 }
+          fontFamily:'Segoe UI, sans-serif', position:'bottom'
         });
         added++;
       });
       renderTimeline(); renderProperties();
-      pushHistory();
-      if(skipped) alert(`Se importaron ${added} líneas. ${skipped} se omitieron por solaparse con clips de texto ya existentes en la primera pista de texto (crea otra pista de texto para superponerlas).`);
+      if(skipped) alert(`Se importaron ${added} líneas. ${skipped} se omitieron por solaparse con clips de texto ya existentes en la pista.`);
     };
     reader.readAsText(file, 'utf-8');
   }
@@ -809,7 +846,8 @@
   function selectClip(id){
     selectedClipId = id;
     const c = clips.find(cc => cc.id === id);
-    canvasSelection = (c && (c.type==='video' || c.type==='image' || c.type==='text')) ? { type:'clip', id:c.id } : null;
+    canvasSelection = (c && (c.type==='video' || c.type==='image')) ? { type:'clip', id:c.id } : null;
+    if(c && trackKindOf(c) !== 'text') targetTrack[trackKindOf(c)] = c.track;
     document.getElementById('btnEditSpectrum').classList.remove('primary');
     renderTimeline();
     renderProperties();
@@ -821,55 +859,36 @@
 
   function renderProperties(){
     const panel = document.getElementById('propertiesPanel');
+    envEditor = null;
     const c = getSelected();
     if(!c){ panel.innerHTML = '<div class="empty">Selecciona un clip en la línea de tiempo para editarlo.</div>'; return; }
 
     if(c.type === 'text'){
-      if(!c.transform) c.transform = { x:0.5, y:0.88, scale:1, rotation:0, opacity:1 };
-      const t = c.transform;
       panel.innerHTML = `
         <div class="field"><label>Contenido</label><textarea id="p-text">${escapeHtml(c.text)}</textarea></div>
         <div class="field-row">
           <div class="field"><label>Color</label><input type="color" id="p-color" class="swatch" value="${c.color}"></div>
-          <div class="field"><label>Tamaño de letra</label><input type="number" id="p-size" min="8" max="160" value="${c.fontSize}"></div>
+          <div class="field"><label>Tamaño</label><input type="number" id="p-size" min="8" max="160" value="${c.fontSize}"></div>
         </div>
-        <div class="field"><label>Fuente</label>
-          <select id="p-font">
-            ${FONT_OPTIONS.map(f => `<option value='${f.value}' ${c.fontFamily===f.value?'selected':''} style="font-family:${f.value};">${f.label}</option>`).join('')}
+        <div class="field"><label>Posición</label>
+          <select id="p-pos">
+            <option value="top" ${c.position==='top'?'selected':''}>Arriba</option>
+            <option value="center" ${c.position==='center'?'selected':''}>Centro</option>
+            <option value="bottom" ${c.position==='bottom'?'selected':''}>Abajo</option>
           </select>
         </div>
         <div class="field"><label>Duración (s)</label><input type="number" id="p-dur" min="0.2" step="0.1" value="${c.duration.toFixed(1)}"></div>
-        <h3 style="margin-top:10px;">Posición y forma en el vídeo</h3>
-        <div class="field-row">
-          <div class="field"><label>Posición X (%)</label><input type="range" id="p-tx" min="-20" max="120" value="${Math.round(t.x*100)}"></div>
-          <div class="field"><label>Posición Y (%)</label><input type="range" id="p-ty" min="-20" max="120" value="${Math.round(t.y*100)}"></div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>Tamaño (%)</label><input type="range" id="p-tscale" min="5" max="400" value="${Math.round(t.scale*100)}"></div>
-          <div class="field"><label>Rotación (°)</label><input type="number" id="p-trot" value="${Math.round(t.rotation)}"></div>
-        </div>
-        <div class="field"><label>Transparencia (%)</label><input type="range" id="p-topacity" min="0" max="100" value="${Math.round(t.opacity*100)}"></div>
-        <div class="field" style="font-size:11.5px;color:var(--muted);">
-          También puedes arrastrar el texto directamente sobre el lienzo (si es el que se ve en ese instante): se ancla solo a los ejes de simetría del lienzo y a la posición de otros elementos.
-        </div>
       `;
       document.getElementById('p-text').addEventListener('input', e => { c.text = e.target.value; });
       document.getElementById('p-color').addEventListener('input', e => { c.color = e.target.value; });
-      document.getElementById('p-size').addEventListener('input', e => { c.fontSize = parseFloat(e.target.value)||48; updateSelectionOverlay(); });
-      document.getElementById('p-font').addEventListener('change', e => { c.fontFamily = e.target.value; updateSelectionOverlay(); });
+      document.getElementById('p-size').addEventListener('input', e => { c.fontSize = parseFloat(e.target.value)||48; });
+      document.getElementById('p-pos').addEventListener('change', e => { c.position = e.target.value; });
       document.getElementById('p-dur').addEventListener('change', e => {
         const v = Math.max(0.2, parseFloat(e.target.value)||c.duration);
-        if(!overlaps(c.track, c.start, v, c.id)){ c.duration = v; renderTimeline(); pushHistory(); }
+        if(!overlaps(c.track, c.start, v, c.id)){ c.duration = v; renderTimeline(); }
       });
-      const txEl = document.getElementById('p-tx'), tyEl = document.getElementById('p-ty');
-      const tsEl = document.getElementById('p-tscale'), trEl = document.getElementById('p-trot');
-      const toEl = document.getElementById('p-topacity');
-      txEl.addEventListener('input', e => { t.x = parseFloat(e.target.value)/100; updateSelectionOverlay(); });
-      tyEl.addEventListener('input', e => { t.y = parseFloat(e.target.value)/100; updateSelectionOverlay(); });
-      tsEl.addEventListener('input', e => { t.scale = Math.max(0.05, parseFloat(e.target.value)/100); updateSelectionOverlay(); });
-      trEl.addEventListener('input', e => { t.rotation = parseFloat(e.target.value)||0; updateSelectionOverlay(); });
-      toEl.addEventListener('input', e => { t.opacity = parseFloat(e.target.value)/100; });
-      [txEl,tyEl,tsEl,trEl,toEl].forEach(elx => elx.addEventListener('change', () => pushHistory()));
+    } else if(c.type === 'audio'){
+      renderAudioProperties(panel, c);
     } else {
       const m = mediaLibrary.find(mm => mm.id === c.mediaId);
       const t = c.transform;
@@ -922,6 +941,185 @@
     }
   }
 
+  function renderAudioProperties(panel, c){
+    if(!c.envelope) c.envelope = [];
+    if(c.volume == null) c.volume = 1;
+    const lvl = Math.round(c.volume*100);
+    panel.innerHTML = `
+      <div class="field"><label>Nombre</label><div style="font-size:12.5px;">${escapeHtml(c.name)}</div></div>
+      <div class="field-row">
+        <div class="field"><label>Inicio (s)</label><div style="font-size:12.5px;">${c.start.toFixed(2)}</div></div>
+        <div class="field"><label>Duración (s)</label><div style="font-size:12.5px;">${c.duration.toFixed(2)}</div></div>
+      </div>
+      <div class="field" style="font-size:11.5px;color:var(--muted);">
+        Arrastra los bordes del clip en la línea de tiempo para recortarlo; arrástralo a otra pista de audio para cambiarlo de capa.
+      </div>
+      <h3 style="margin-top:10px;">Volumen</h3>
+      <div class="field" id="p-volWrap" style="${c.autoVol?'display:none;':''}">
+        <label>Volumen del clip: <span id="p-volLabel">${lvl}%</span></label>
+        <input type="range" id="p-vol" min="0" max="150" value="${lvl}">
+      </div>
+      <div class="field"><label><input type="checkbox" id="p-auto" ${c.autoVol?'checked':''}> Automatizar volumen</label></div>
+      <div id="p-envWrap" style="${c.autoVol?'':'display:none;'}">
+        <canvas id="p-env" width="468" height="240" style="width:100%;height:120px;border:1px solid var(--line);border-radius:6px;cursor:crosshair;display:block;"></canvas>
+        <div id="p-envInfo" style="font-size:11px;color:var(--accent);min-height:16px;margin:4px 0;"></div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4;margin-bottom:9px;">
+          Clic en la gráfica: añade un punto · arrástralo para moverlo · doble clic o clic derecho sobre un punto: lo borra. La línea amarilla del clip en la línea de tiempo muestra la curva.
+        </div>
+        <div class="field-row" style="align-items:flex-end;">
+          <div class="field"><label>Fundido (s)</label><input type="number" id="p-fade" min="0.1" step="0.1" value="1"></div>
+          <button id="p-fadeIn" style="margin-bottom:9px;">Fade in</button>
+          <button id="p-fadeOut" style="margin-bottom:9px;">Fade out</button>
+        </div>
+        <button id="p-envReset" style="width:100%;">Reiniciar curva</button>
+      </div>
+    `;
+    const ed = setupEnvelopeEditor(c);
+    envEditor = ed;
+    const volEl = document.getElementById('p-vol');
+    volEl.addEventListener('input', e => {
+      c.volume = parseFloat(e.target.value)/100;
+      document.getElementById('p-volLabel').textContent = Math.round(c.volume*100) + '%';
+    });
+    document.getElementById('p-auto').addEventListener('change', e => {
+      c.autoVol = e.target.checked;
+      document.getElementById('p-volWrap').style.display = c.autoVol ? 'none' : '';
+      document.getElementById('p-envWrap').style.display = c.autoVol ? '' : 'none';
+      if(c.autoVol && !c.envelope.length){
+        c.envelope = [{ t:c.trimStart, v:c.volume }, { t:c.trimStart + c.duration, v:c.volume }];
+      }
+      ed.draw(); renderTimeline();
+    });
+    const fadeEl = document.getElementById('p-fade');
+    const fadeLen = () => Math.max(0.05, Math.min(parseFloat(fadeEl.value) || 1, c.duration));
+    document.getElementById('p-fadeIn').addEventListener('click', () => {
+      const a = c.trimStart, f = fadeLen();
+      c.envelope = c.envelope.filter(p => p.t < a - 1e-6 || p.t > a + f + 1e-6);
+      const lvl = c.envelope.length ? envelopeValue(c.envelope, a + f) : c.volume;
+      c.envelope.push({ t:a, v:0 }, { t:a + f, v:lvl });
+      c.envelope.sort((x,y) => x.t - y.t);
+      ed.draw(); renderTimeline();
+    });
+    document.getElementById('p-fadeOut').addEventListener('click', () => {
+      const b = c.trimStart + c.duration, f = fadeLen();
+      c.envelope = c.envelope.filter(p => p.t < b - f - 1e-6 || p.t > b + 1e-6);
+      const lvl = c.envelope.length ? envelopeValue(c.envelope, b - f) : c.volume;
+      c.envelope.push({ t:b - f, v:lvl }, { t:b, v:0 });
+      c.envelope.sort((x,y) => x.t - y.t);
+      ed.draw(); renderTimeline();
+    });
+    document.getElementById('p-envReset').addEventListener('click', () => {
+      c.envelope = [{ t:c.trimStart, v:c.volume }, { t:c.trimStart + c.duration, v:c.volume }];
+      ed.draw(); renderTimeline();
+    });
+  }
+
+  /* Editor gráfico de la curva de volumen (canvas dentro del panel de propiedades) */
+  function setupEnvelopeEditor(c){
+    const cv = document.getElementById('p-env');
+    const info = document.getElementById('p-envInfo');
+    const cx = cv.getContext('2d');
+    const W = cv.width, H = cv.height, PX = 14, PY = 16;
+    const win = () => [c.trimStart, c.trimStart + c.duration];
+    const tToX = t => { const [a,b] = win(); return PX + (t-a)/(b-a)*(W-2*PX); };
+    const xToT = x => { const [a,b] = win(); return a + (x-PX)/(W-2*PX)*(b-a); };
+    const vToY = v => PY + (1 - v/ENV_MAX)*(H-2*PY);
+    const yToV = y => (1 - (y-PY)/(H-2*PY))*ENV_MAX;
+    const clamp = (x,lo,hi) => Math.max(lo, Math.min(hi, x));
+    const val = t => c.envelope.length ? envelopeValue(c.envelope, t) : c.volume;
+    let createdAt = 0;
+
+    function draw(){
+      const [a,b] = win();
+      cx.clearRect(0,0,W,H);
+      cx.fillStyle = '#14171c'; cx.fillRect(0,0,W,H);
+      cx.font = '20px sans-serif'; cx.textBaseline = 'middle';
+      [0,0.5,1,1.5].forEach(v => {
+        const y = vToY(v);
+        cx.strokeStyle = v===1 ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.1)';
+        cx.lineWidth = 1; cx.beginPath(); cx.moveTo(PX,y); cx.lineTo(W-PX,y); cx.stroke();
+        cx.fillStyle = '#8a93a3'; cx.fillText(Math.round(v*100) + '%', PX+4, y-10);
+      });
+      const pts = [[a, val(a)]];
+      c.envelope.forEach(p => { if(p.t > a && p.t < b) pts.push([p.t, p.v]); });
+      pts.push([b, val(b)]);
+      cx.beginPath();
+      pts.forEach(([t,v],i) => { const x = tToX(t), y = vToY(v); if(i) cx.lineTo(x,y); else cx.moveTo(x,y); });
+      cx.lineTo(tToX(b), vToY(0)); cx.lineTo(tToX(a), vToY(0)); cx.closePath();
+      cx.fillStyle = 'rgba(79,209,197,.18)'; cx.fill();
+      cx.beginPath();
+      pts.forEach(([t,v],i) => { const x = tToX(t), y = vToY(v); if(i) cx.lineTo(x,y); else cx.moveTo(x,y); });
+      cx.strokeStyle = '#4fd1c5'; cx.lineWidth = 3; cx.stroke();
+      c.envelope.forEach(p => {
+        if(p.t < a || p.t > b) return;
+        cx.beginPath(); cx.arc(tToX(p.t), vToY(p.v), 7, 0, Math.PI*2);
+        cx.fillStyle = '#ffd166'; cx.fill(); cx.strokeStyle = '#0b1210'; cx.lineWidth = 2; cx.stroke();
+      });
+      if(playhead >= c.start && playhead <= c.start + c.duration){
+        const x = tToX(c.trimStart + playhead - c.start);
+        cx.strokeStyle = '#ff9f5a'; cx.lineWidth = 2;
+        cx.beginPath(); cx.moveTo(x, PY-8); cx.lineTo(x, H-PY+8); cx.stroke();
+      }
+    }
+
+    const pos = ev => { const r = cv.getBoundingClientRect(); return { x:(ev.clientX-r.left)/r.width*W, y:(ev.clientY-r.top)/r.height*H }; };
+    function hit(x,y){
+      const [a,b] = win();
+      for(let i=0;i<c.envelope.length;i++){
+        const p = c.envelope[i];
+        if(p.t < a || p.t > b) continue;
+        if(Math.hypot(tToX(p.t)-x, vToY(p.v)-y) <= 14) return i;
+      }
+      return -1;
+    }
+    const label = p => (p.t - c.trimStart).toFixed(2) + ' s · ' + Math.round(p.v*100) + '%';
+
+    cv.addEventListener('mousedown', ev => {
+      if(ev.button !== 0) return;
+      const { x, y } = pos(ev);
+      let idx = hit(x,y);
+      if(idx < 0){
+        const [a,b] = win();
+        const np = { t:clamp(xToT(x), a, b), v:clamp(yToV(y), 0, ENV_MAX) };
+        c.envelope.push(np); c.envelope.sort((p,q) => p.t - q.t);
+        idx = c.envelope.indexOf(np);
+        createdAt = performance.now();
+      }
+      const pt = c.envelope[idx];
+      function onMove(e2){
+        const m = pos(e2), [a,b] = win();
+        const i = c.envelope.indexOf(pt);
+        const prev = c.envelope[i-1], next = c.envelope[i+1];
+        const lo = Math.max(a, prev ? prev.t + 0.01 : a);
+        const hi = Math.min(b, next ? next.t - 0.01 : b);
+        pt.t = clamp(xToT(m.x), lo, Math.max(lo, hi));
+        pt.v = clamp(yToV(m.y), 0, ENV_MAX);
+        info.textContent = label(pt);
+        draw(); renderTimeline();
+      }
+      function onUp(){
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        info.textContent = '';
+        renderTimeline();
+      }
+      info.textContent = label(pt);
+      draw(); renderTimeline();
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    function removeAt(ev){
+      const { x, y } = pos(ev);
+      const i = hit(x,y);
+      if(i >= 0){ c.envelope.splice(i,1); draw(); renderTimeline(); }
+    }
+    cv.addEventListener('dblclick', ev => { if(performance.now() - createdAt > 700) removeAt(ev); });
+    cv.addEventListener('contextmenu', ev => { ev.preventDefault(); removeAt(ev); });
+
+    draw();
+    return { draw };
+  }
+
   function updateActionButtons(){
     const has = !!getSelected();
     document.getElementById('btnDelete').disabled = !has;
@@ -929,10 +1127,14 @@
 
   document.getElementById('btnDelete').addEventListener('click', () => {
     if(!selectedClipId) return;
+    const removed = clips.find(c => c.id === selectedClipId);
+    if(removed && removed._pel){
+      removed._pel.pause(); removed._pel.remove();
+      if(removed._pel._gain){ try{ removed._pel._gain.disconnect(); }catch(e){} }
+    }
     clips = clips.filter(c => c.id !== selectedClipId);
     selectedClipId = null;
     renderTimeline(); renderProperties(); updateActionButtons();
-    pushHistory();
   });
 
   document.getElementById('btnSplit').addEventListener('click', splitSelectedAtPlayhead);
@@ -947,12 +1149,13 @@
     const second = Object.assign({}, c, {
       id:newId(), start:t, duration:secondDur,
       trimStart: (c.type==='video'||c.type==='audio') ? c.trimStart + firstDur : c.trimStart,
-      transform: c.transform ? Object.assign({}, c.transform) : undefined
+      transform: c.transform ? Object.assign({}, c.transform) : undefined,
+      envelope: c.envelope ? c.envelope.map(p => ({ t:p.t, v:p.v })) : undefined, // copia propia (tiempo de archivo: no hay que desplazarla)
+      _pel: null // el trozo nuevo necesita su propio reproductor, no puede compartir el del original
     });
     c.duration = firstDur;
     clips.push(second);
     renderTimeline();
-    pushHistory();
   }
 
   document.addEventListener('keydown', e => {
@@ -960,38 +1163,7 @@
     if(e.code === 'Space'){ e.preventDefault(); togglePlay(); }
     else if(e.key === 'Delete' || e.key==='Backspace'){ if(selectedClipId){ e.preventDefault(); document.getElementById('btnDelete').click(); } }
     else if(e.key === 's' || e.key==='S'){ splitSelectedAtPlayhead(); }
-    else if((e.ctrlKey||e.metaKey) && !e.altKey && (e.key==='z'||e.key==='Z')){ e.preventDefault(); undo(); }
-    else if((e.ctrlKey||e.metaKey) && e.altKey && (e.key==='z'||e.key==='Z')){ e.preventDefault(); redo(); }
   });
-
-  /* ---------------- Deshacer / Rehacer (Ctrl+Z / Ctrl+Alt+Z) ---------------- */
-  let historyStack = [];
-  let historyIndex = -1;
-  const MAX_HISTORY = 100;
-  function snapshotState(){ return JSON.stringify({ clips, trackDefs, trackCounters }); }
-  function pushHistory(){
-    historyStack = historyStack.slice(0, historyIndex+1);
-    historyStack.push(snapshotState());
-    if(historyStack.length > MAX_HISTORY) historyStack.shift();
-    historyIndex = historyStack.length - 1;
-    updateUndoRedoButtons();
-  }
-  function restoreState(json){
-    const data = JSON.parse(json);
-    clips = data.clips; trackDefs = data.trackDefs; trackCounters = data.trackCounters;
-    selectedClipId = null; canvasSelection = null;
-    renderTrackStructure();
-    renderTimeline(); renderProperties(); updateActionButtons(); updateSelectionOverlay();
-    updateUndoRedoButtons();
-  }
-  function undo(){ if(historyIndex > 0){ historyIndex--; restoreState(historyStack[historyIndex]); } }
-  function redo(){ if(historyIndex < historyStack.length-1){ historyIndex++; restoreState(historyStack[historyIndex]); } }
-  function updateUndoRedoButtons(){
-    document.getElementById('btnUndo').disabled = historyIndex <= 0;
-    document.getElementById('btnRedo').disabled = historyIndex >= historyStack.length-1;
-  }
-  document.getElementById('btnUndo').addEventListener('click', undo);
-  document.getElementById('btnRedo').addEventListener('click', redo);
 
   /* ---------------- Timeline rendering ---------------- */
   const rulerEl = document.getElementById('ruler');
@@ -999,65 +1171,24 @@
   const timelineScroll = document.getElementById('timelineScroll');
   const playheadEl = document.getElementById('playhead');
   const trackLabelsEl = document.getElementById('trackLabels');
-  let trackEls = {}; // key -> .track-row element
+  let trackEls = {};
 
-  function renderTrackStructure(){
-    // reconstruye las etiquetas y filas de pista según trackDefs (permite N pistas por grupo,
-    // reordenables por arrastre, y activables/desactivables con el switch)
-    trackLabelsEl.querySelectorAll('.track-label').forEach(n => n.remove());
-    timelineInner.querySelectorAll('.track-row').forEach(n => n.remove());
-    trackEls = {};
-    trackDefs.forEach(td => {
-      const label = document.createElement('div');
-      label.className = 'track-label' + (td.enabled===false ? ' track-disabled-label' : '');
-      const canDelete = tracksOfType(td.type).length > 1;
-      label.innerHTML = `
-        <span class="drag-handle" draggable="true" title="Arrastra para reordenar (arriba = queda delante)">⠿</span>
-        <label class="track-switch" title="Activar / desactivar pista">
-          <input type="checkbox" ${td.enabled!==false?'checked':''}>
-          <span class="switch-slider"></span>
-        </label>
-        <span class="track-name">${td.label}</span>
-        ${canDelete ? `<button class="del-track" title="Eliminar pista">✕</button>` : ''}
-      `;
-      label.querySelector('.drag-handle').addEventListener('dragstart', e => {
-        e.dataTransfer.setData('text/plain', td.key);
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      label.addEventListener('dragover', e => { e.preventDefault(); label.classList.add('drag-over'); });
-      label.addEventListener('dragleave', () => label.classList.remove('drag-over'));
-      label.addEventListener('drop', e => {
-        e.preventDefault(); label.classList.remove('drag-over');
-        moveTrack(e.dataTransfer.getData('text/plain'), td.key);
-      });
-      label.querySelector('.track-switch input').addEventListener('change', e => {
-        td.enabled = e.target.checked;
-        renderTrackStructure();
-        renderTimeline();
-        pushHistory();
-      });
-      if(canDelete) label.querySelector('.del-track').addEventListener('click', () => removeTrack(td.key));
-      trackLabelsEl.appendChild(label);
-
-      const row = document.createElement('div');
-      row.className = 'track-row' + (td.type==='video' ? ' visual' : '') + (td.enabled===false ? ' track-disabled' : '');
-      row.dataset.track = td.key;
-      timelineInner.appendChild(row);
-      trackEls[td.key] = row;
-    });
-    timelineInner.appendChild(playheadEl);
+  function envelopeSvg(c){
+    if(!(c.type==='audio' && c.autoVol && c.envelope && c.envelope.length)) return '';
+    const w0 = c.trimStart, w1 = c.trimStart + c.duration;
+    const pts = [[0, envelopeValue(c.envelope, w0)]];
+    c.envelope.forEach(p => { if(p.t > w0 && p.t < w1) pts.push([(p.t-w0)/(w1-w0)*100, p.v]); });
+    pts.push([100, envelopeValue(c.envelope, w1)]);
+    const str = pts.map(([x,v]) => x.toFixed(2) + ',' + (100 - Math.min(1, v/ENV_MAX)*100).toFixed(2)).join(' ');
+    return '<svg class="env-svg" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points="' + str +
+      '" fill="none" stroke="#ffd166" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>';
   }
-
-  document.getElementById('btnAddTrackVideo').addEventListener('click', () => addTrack('video'));
-  document.getElementById('btnAddTrackText').addEventListener('click', () => addTrack('text'));
-  document.getElementById('btnAddTrackAudio').addEventListener('click', () => addTrack('audio'));
 
   function renderTimeline(){
     const dur = timelineDuration() + 3; // small trailing margin
     const totalWidth = Math.max(dur * pixelsPerSecond, timelineScroll.clientWidth);
     timelineInner.style.width = totalWidth + 'px';
     rulerEl.style.width = totalWidth + 'px';
-    playheadEl.style.height = timelineInner.scrollHeight ? '100%' : '100%';
 
     // ruler ticks
     rulerEl.innerHTML = '';
@@ -1070,23 +1201,59 @@
       rulerEl.appendChild(tick);
     }
 
-    Object.values(trackEls).forEach(el => { el.innerHTML=''; el.style.width = totalWidth+'px'; });
+    // pistas: una fila + una etiqueta por cada pista
+    timelineInner.querySelectorAll('.track-row').forEach(r => r.remove());
+    trackLabelsEl.innerHTML = '<div class="ruler-spacer"></div>';
+    trackEls = {};
+    const multi = { visual: tracksOfKind('visual').length > 1, audio: tracksOfKind('audio').length > 1 };
+    tracks.forEach(tr => {
+      const row = document.createElement('div');
+      row.className = 'track-row' + (tr.kind==='visual' ? ' visual' : '');
+      row.dataset.track = tr.id;
+      row.style.width = totalWidth + 'px';
+      timelineInner.insertBefore(row, playheadEl);
+      trackEls[tr.id] = row;
+
+      const lab = document.createElement('div');
+      const manyOfKind = tr.kind !== 'text' && multi[tr.kind];
+      lab.className = 'track-label' + (manyOfKind && targetTrack[tr.kind]===tr.id ? ' target' : '');
+      lab.title = tr.kind === 'text' ? '' : 'Clic: añadir los próximos medios a esta pista';
+      lab.innerHTML = '<span class="tl-name">' + TRACK_ICONS[tr.kind] + ' ' + escapeHtml(tr.name) + '</span>' +
+        (manyOfKind ? '<button class="tl-del" title="Eliminar pista">×</button>' : '');
+      lab.addEventListener('click', e => {
+        if(tr.kind === 'text') return;
+        if(e.target.classList.contains('tl-del')){ removeTrack(tr.id); return; }
+        targetTrack[tr.kind] = tr.id;
+        renderTimeline();
+      });
+      trackLabelsEl.appendChild(lab);
+    });
+    const pad = document.createElement('div');
+    pad.style.cssText = 'height:14px;flex-shrink:0;';   // compensa la barra de scroll horizontal
+    trackLabelsEl.appendChild(pad);
+    trackLabelsEl.scrollTop = timelineScroll.scrollTop;
 
     clips.forEach(c => {
+      const row = trackEls[c.track];
+      if(!row) return;
       const el = document.createElement('div');
       el.className = 'clip ' + c.type + (c.id===selectedClipId?' selected':'');
       el.style.left = (c.start*pixelsPerSecond)+'px';
       el.style.width = Math.max(4,c.duration*pixelsPerSecond)+'px';
       el.dataset.id = c.id;
       const label = c.type==='text' ? ('🔤 ' + c.text.slice(0,24)) : (ICONS[c.type]+' '+c.name);
-      el.innerHTML = `<div class="clip-name">${escapeHtml(label)}</div>
+      el.innerHTML = envelopeSvg(c) + `<div class="clip-name">${escapeHtml(label)}</div>
         <div class="handle left"></div><div class="handle right"></div>`;
       attachClipDrag(el, c);
-      trackEls[c.track].appendChild(el);
+      row.appendChild(el);
     });
 
     positionPlayhead();
   }
+
+  timelineScroll.addEventListener('scroll', () => { trackLabelsEl.scrollTop = timelineScroll.scrollTop; });
+  document.getElementById('btnAddVisualTrack').addEventListener('click', () => addTrack('visual'));
+  document.getElementById('btnAddAudioTrack').addEventListener('click', () => addTrack('audio'));
 
   function positionPlayhead(){
     playheadEl.style.left = (playhead*pixelsPerSecond) + 'px';
@@ -1106,20 +1273,13 @@
     renderPreviewFrame();
   }
 
-  /* ---- Preview de recorte: mueve el cabezal al borde que se está arrastrando,
-     sin tocar el límite superior de la duración total (por eso no usa seekTo). ---- */
-  function previewSeek(t){
-    playhead = Math.max(0, t);
-    positionPlayhead();
-    renderPreviewFrame();
-    updateSelectionOverlay();
-  }
-
   /* ---- Clip dragging (move / trim) ---- */
   function attachClipDrag(el, clip){
     el.addEventListener('mousedown', e => {
       e.stopPropagation();
-      selectClip(clip.id);
+      selectClip(clip.id);   // vuelve a dibujar la línea de tiempo: seguimos con el elemento nuevo
+      const fresh = trackEls[clip.track] && trackEls[clip.track].querySelector('.clip[data-id="' + clip.id + '"]');
+      if(fresh) el = fresh;
       const target = e.target;
       let mode = 'move';
       if(target.classList.contains('handle') && target.classList.contains('left')) mode='trim-left';
@@ -1127,17 +1287,17 @@
 
       const startX = e.clientX;
       const orig = { start:clip.start, duration:clip.duration, trimStart:clip.trimStart };
-      const origPlayhead = playhead;
       const mediaItem = clip.mediaId ? mediaLibrary.find(m=>m.id===clip.mediaId) : null;
       const maxDur = mediaItem && clip.type!=='image' ? mediaItem.naturalDuration : 999;
-      const groupType = (clip.type==='video'||clip.type==='image') ? 'video' : clip.type;
-
-      function trackKeyAtY(clientY){
-        for(const td of tracksOfType(groupType)){
-          const rowEl = trackEls[td.key];
-          if(!rowEl) continue;
-          const r = rowEl.getBoundingClientRect();
-          if(clientY >= r.top && clientY < r.bottom) return td.key;
+      const kind = trackKindOf(clip);
+      let tempTrack = clip.track;
+      function trackAtY(y){
+        for(const r of timelineInner.querySelectorAll('.track-row')){
+          const bb = r.getBoundingClientRect();
+          if(y >= bb.top && y < bb.bottom){
+            const tr = getTrack(r.dataset.track);
+            return tr && tr.kind === kind ? tr.id : null;
+          }
         }
         return null;
       }
@@ -1149,11 +1309,8 @@
           let ns = Math.max(0, orig.start + dt);
           el.style.left = (ns*pixelsPerSecond)+'px';
           clip._tempStart = ns;
-          const hitTrack = trackKeyAtY(ev.clientY);
-          if(hitTrack && hitTrack !== (clip._tempTrack || clip.track)){
-            clip._tempTrack = hitTrack;
-            trackEls[hitTrack].appendChild(el);
-          }
+          const tid = trackAtY(ev.clientY);
+          if(tid && tid !== tempTrack && trackEls[tid]){ tempTrack = tid; trackEls[tid].appendChild(el); }
         } else if(mode === 'trim-left'){
           let delta = dt;
           delta = Math.max(-orig.trimStart, delta);
@@ -1165,13 +1322,11 @@
           el.style.left = (ns*pixelsPerSecond)+'px';
           el.style.width = Math.max(4,nd*pixelsPerSecond)+'px';
           clip._tempStart = ns; clip._tempDur = nd; clip._tempTrim = nts;
-          previewSeek(ns);
         } else if(mode === 'trim-right'){
           let nd = Math.max(0.2, orig.duration + dt);
           if(mediaItem && clip.type!=='image') nd = Math.min(nd, maxDur - orig.trimStart);
           el.style.width = Math.max(4,nd*pixelsPerSecond)+'px';
           clip._tempDur = nd;
-          previewSeek(orig.start + nd);
         }
       }
       function onUp(){
@@ -1180,21 +1335,13 @@
         let ns = clip._tempStart !== undefined ? clip._tempStart : clip.start;
         let nd = clip._tempDur !== undefined ? clip._tempDur : clip.duration;
         let nts = clip._tempTrim !== undefined ? clip._tempTrim : clip.trimStart;
-        let nTrack = clip._tempTrack || clip.track;
-        delete clip._tempStart; delete clip._tempDur; delete clip._tempTrim; delete clip._tempTrack;
+        delete clip._tempStart; delete clip._tempDur; delete clip._tempTrim;
 
-        if(!overlaps(nTrack, ns, nd, clip.id)){
-          clip.start = ns; clip.duration = nd; clip.trimStart = nts; clip.track = nTrack;
-          pushHistory();
-        }
-        if(mode === 'trim-left' || mode === 'trim-right'){
-          playhead = origPlayhead;
-          positionPlayhead();
+        if(!overlaps(tempTrack, ns, nd, clip.id)){
+          clip.start = ns; clip.duration = nd; clip.trimStart = nts; clip.track = tempTrack;
         }
         renderTimeline();
         renderProperties();
-        renderPreviewFrame();
-        updateSelectionOverlay();
       }
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
@@ -1230,7 +1377,7 @@
   /* ---- Composición con transform (posición / tamaño / rotación / opacidad) ---- */
   function compositeVisual(drawFn, baseW, baseH, transform){
     const cx = transform.x*canvas.width, cy = transform.y*canvas.height;
-    const w = Math.max(1, baseW*transform.scale), h = Math.max(1, baseH*transform.scale);
+    const w = Math.max(1, baseW*transform.scale*(transform.scaleX||1)), h = Math.max(1, baseH*transform.scale*(transform.scaleY||1));
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, transform.opacity));
     ctx.translate(cx, cy);
@@ -1246,19 +1393,7 @@
     try{ ctx.drawImage(source, -dw/2, -dh/2, dw, dh); }catch(e){}
   }
 
-  function measureTextBase(c){
-    ctx.save();
-    ctx.font = `600 ${c.fontSize}px ${c.fontFamily}`;
-    const lines = c.text.split('\n');
-    let maxW = 0;
-    lines.forEach(l => { maxW = Math.max(maxW, ctx.measureText(l).width); });
-    ctx.restore();
-    const h = lines.length * c.fontSize * 1.15;
-    return { w:Math.max(10,maxW), h:Math.max(10,h) };
-  }
-
   function getVisualBaseSize(clip){
-    if(clip.type==='text') return measureTextBase(clip);
     if(clip.type==='image' && clip.isDisc){
       const D = Math.min(canvas.width, canvas.height)*0.55;
       return { w:D, h:D };
@@ -1270,12 +1405,12 @@
   }
 
   function getSpectrumBaseSize(style){
-    if(style==='circular'){ const D = Math.min(canvas.width, canvas.height)*0.6; return { w:D, h:D }; }
+    if(style==='circular' || style==='circwave'){ const D = Math.min(canvas.width, canvas.height)*0.6; return { w:D, h:D }; }
     if(style==='wave') return { w:canvas.width*0.9, h:canvas.height*0.35 };
     return { w:canvas.width*0.9, h:canvas.height*0.4 }; // bars / mirror
   }
 
-  function drawVisualClip(clip, m){
+  function drawVisualClip(clip, m, elOverride){
     const bs = getVisualBaseSize(clip);
     if(clip.type==='image' && clip.isDisc){
       const spinDeg = ((playhead - clip.start) * (clip.discRpm||0) / 60) * 360;
@@ -1293,7 +1428,8 @@
         ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = Math.max(1,w*0.012); ctx.stroke();
       }, bs.w, bs.h, t2);
     } else {
-      compositeVisual((w,h) => { ctx.drawImage(m.el, -w/2, -h/2, w, h); }, bs.w, bs.h, clip.transform);
+      const sourceEl = (clip.type==='video' && elOverride) ? elOverride : m.el;
+      compositeVisual((w,h) => { ctx.drawImage(sourceEl, -w/2, -h/2, w, h); }, bs.w, bs.h, clip.transform);
     }
   }
 
@@ -1305,23 +1441,23 @@
      frecuencias altas. Esta tabla de refuerzo (en dB relativos a 1kHz) compensa
      ambos efectos para que las barras de agudos dejen de verse planas. */
   const HEARING_CURVE_DB = [
-    [20,0],[50,0],[100,0],[200,0],[500,0],[1000,0],[2000,0],[3000,2],
-    [4000,4],[5000,6],[6300,8],[8000,10],[10000,13],[12500,16],[16000,20],[20000,24]
+    [30,-6],[100,-2],[250,0],[500,3],[1000,6],[2000,9],[4000,12],[8000,15],[16000,18]
   ];
-  function hearingCompensationGain(freq){
-    const table = HEARING_CURVE_DB;
-    if(freq <= table[0][0]) return dbToGain(table[0][1]);
-    if(freq >= table[table.length-1][0]) return dbToGain(table[table.length-1][1]);
-    for(let i=0;i<table.length-1;i++){
-      const [f0,d0] = table[i], [f1,d1] = table[i+1];
+  /* Devuelve dB a SUMAR (no un multiplicador). Los graves no se refuerzan:
+     la música ya concentra ahí la energía; solo se inclina hacia los agudos. */
+  function hearingCompensationDb(freq){
+    const t = HEARING_CURVE_DB;
+    if(freq <= t[0][0]) return t[0][1];
+    if(freq >= t[t.length-1][0]) return t[t.length-1][1];
+    for(let i=0;i<t.length-1;i++){
+      const [f0,d0] = t[i], [f1,d1] = t[i+1];
       if(freq>=f0 && freq<=f1){
-        const t = (Math.log(freq)-Math.log(f0)) / (Math.log(f1)-Math.log(f0));
-        return dbToGain(d0 + (d1-d0)*t);
+        const k = (Math.log(freq)-Math.log(f0)) / (Math.log(f1)-Math.log(f0));
+        return d0 + (d1-d0)*k;
       }
     }
-    return 1;
+    return 0;
   }
-  function dbToGain(db){ return Math.min(6, Math.pow(10, db/20)); }
 
   function binIndexForFreq(freq, sampleRate, fftSizeUsed){
     const idx = Math.round(freq / (sampleRate / fftSizeUsed));
@@ -1333,6 +1469,13 @@
     return minF * Math.pow(maxF/minF, t);
   }
 
+  function hexToRgba(hex, a){
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+    if(!m) return hex;
+    const n = parseInt(m[1],16);
+    return 'rgba(' + ((n>>16)&255) + ',' + ((n>>8)&255) + ',' + (n&255) + ',' + a + ')';
+  }
+
   function drawSpectrumContent(w,h){
     const style = document.getElementById('spectrumStyle').value;
     const color = document.getElementById('spectrumColor').value;
@@ -1341,31 +1484,122 @@
     analyser.getByteTimeDomainData(timeData);
     const sampleRate = audioCtx.sampleRate;
     const minF = 30, maxF = Math.min(18000, sampleRate/2 * 0.98);
+    const dbRange = analyser.maxDecibels - analyser.minDecibels;
 
-    function bandValue(freq){
-      const bin = binIndexForFreq(freq, sampleRate, analyser.fftSize);
-      let v = freqData[bin]/255;
-      if(useHearingCurve) v = Math.min(1, v * hearingCompensationGain(freq));
-      return v;
+    function bandValue(freq, barCount){
+      const ratio = Math.pow(maxF/minF, 1/Math.max(1,barCount-1));
+      const lo = binIndexForFreq(freq/Math.sqrt(ratio), sampleRate, analyser.fftSize);
+      const hi = binIndexForFreq(freq*Math.sqrt(ratio), sampleRate, analyser.fftSize);
+      let m = 0;
+      for(let b=lo;b<=Math.max(lo,hi);b++) if(freqData[b]>m) m = freqData[b];
+      let v = m/255;
+      if(useHearingCurve) v += hearingCompensationDb(freq)/dbRange;
+      return Math.max(0, Math.min(1, v));
+    }
+    const bands = n => Array.from({length:n}, (_,i) => bandValue(logFreqForBar(i, n, minF, maxF), n));
+    function smoothBands(vals, passes){
+      let cur = vals;
+      for(let k=0;k<passes;k++){
+        cur = cur.map((v,i) => 0.25*(cur[i-1]!==undefined?cur[i-1]:v) + 0.5*v + 0.25*(cur[i+1]!==undefined?cur[i+1]:v));
+      }
+      return cur;
+    }
+    // curva suave que pasa "cerca" de los puntos (cont=true: continúa el trazo actual)
+    function smoothPath(pts, cont){
+      if(cont) ctx.lineTo(pts[0][0], pts[0][1]); else ctx.moveTo(pts[0][0], pts[0][1]);
+      for(let i=1;i<pts.length-1;i++){
+        const mx = (pts[i][0]+pts[i+1][0])/2, my = (pts[i][1]+pts[i+1][1])/2;
+        ctx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
+      }
+      const l = pts[pts.length-1];
+      ctx.lineTo(l[0], l[1]);
+    }
+    function smoothClosed(pts){
+      const n = pts.length, mid = (p,q) => [(p[0]+q[0])/2, (p[1]+q[1])/2];
+      const m0 = mid(pts[n-1], pts[0]);
+      ctx.moveTo(m0[0], m0[1]);
+      for(let i=0;i<n;i++){
+        const p = pts[i], m = mid(p, pts[(i+1)%n]);
+        ctx.quadraticCurveTo(p[0], p[1], m[0], m[1]);
+      }
+      ctx.closePath();
     }
 
     ctx.save();
+    const A = ctx.globalAlpha;   // respeta la transparencia ajustada en el panel
+    ctx.fillStyle = color; ctx.strokeStyle = color;
+
     if(style==='bars' || style==='mirror'){
       const barCount = 64;
       const barW = w/barCount;
+      ctx.globalAlpha = A*0.9;
       for(let i=0;i<barCount;i++){
         const freq = logFreqForBar(i, barCount, minF, maxF);
-        const v = bandValue(freq);
+        const v = bandValue(freq, barCount);
         const barH = v*h*0.7;
-        ctx.fillStyle = color; ctx.globalAlpha = 0.9;
         ctx.fillRect(-w/2+i*barW+1, h/2-barH, barW-2, barH);
         if(style==='mirror'){
           ctx.fillRect(-w/2+i*barW+1, -h/2, barW-2, barH);
         }
       }
+    } else if(style==='thin'){
+      const n = 128, vals = bands(n), slot = w/n, bw = Math.max(1, slot*0.38);
+      ctx.globalAlpha = A*0.95;
+      vals.forEach((v,i) => {
+        const bh = Math.max(1, v*h*0.9);
+        ctx.fillRect(-w/2 + i*slot + (slot-bw)/2, h/2 - bh, bw, bh);
+      });
+    } else if(style==='rounded'){
+      const n = 40, vals = bands(n), slot = w/n, lw = Math.max(2, slot*0.55);
+      ctx.lineCap = 'round'; ctx.lineWidth = lw; ctx.globalAlpha = A*0.95;
+      vals.forEach((v,i) => {
+        const x = -w/2 + slot*(i+0.5), len = Math.max(0, v*h*0.9 - lw);
+        ctx.beginPath(); ctx.moveTo(x, -len/2); ctx.lineTo(x, len/2); ctx.stroke();
+      });
+    } else if(style==='led'){
+      const cols = 32, rows = 18, vals = bands(cols);
+      const slot = w/cols, cw = slot*0.78, rh = h/rows, chh = rh*0.7;
+      vals.forEach((v,i) => {
+        const lit = Math.round(v*rows);
+        for(let r=0;r<rows;r++){
+          ctx.globalAlpha = A*(r < lit ? 0.95 : 0.1);
+          ctx.fillRect(-w/2 + i*slot + (slot-cw)/2, h/2 - (r+1)*rh + (rh-chh)/2, cw, chh);
+        }
+      });
+    } else if(style==='dots'){
+      const n = 48, vals = bands(n), slot = w/n;
+      const r = Math.max(2, Math.min(slot*0.32, h*0.05));
+      ctx.globalAlpha = A*0.95;
+      vals.forEach((v,i) => {
+        ctx.beginPath();
+        ctx.arc(-w/2 + slot*(i+0.5), h/2 - r - v*(h-2*r)*0.9, r, 0, Math.PI*2);
+        ctx.fill();
+      });
+    } else if(style==='smooth'){
+      const n = 40, vals = smoothBands(bands(n), 2);
+      const pts = vals.map((v,i) => [-w/2 + i/(n-1)*w, h/2 - v*h*0.9]);
+      ctx.beginPath(); smoothPath(pts); ctx.lineTo(w/2, h/2); ctx.lineTo(-w/2, h/2); ctx.closePath();
+      const g = ctx.createLinearGradient(0, -h/2, 0, h/2);
+      g.addColorStop(0, hexToRgba(color, 0.8)); g.addColorStop(1, hexToRgba(color, 0.05));
+      ctx.fillStyle = g; ctx.fill();
+      ctx.beginPath(); smoothPath(pts);
+      ctx.lineWidth = Math.max(2, w*0.004); ctx.lineJoin = 'round'; ctx.stroke();
+    } else if(style==='smoothmirror'){
+      const n = 40, vals = smoothBands(bands(n), 2);
+      const top = vals.map((v,i) => [-w/2 + i/(n-1)*w, -Math.max(1.5, v*h*0.45)]);
+      const bot = vals.map((v,i) => [-w/2 + i/(n-1)*w,  Math.max(1.5, v*h*0.45)]);
+      ctx.beginPath(); smoothPath(top); smoothPath(bot.slice().reverse(), true); ctx.closePath();
+      ctx.fillStyle = hexToRgba(color, 0.4); ctx.fill();
+      ctx.lineWidth = Math.max(2, w*0.004); ctx.lineJoin = 'round';
+      ctx.beginPath(); smoothPath(top); ctx.stroke();
+      ctx.beginPath(); smoothPath(bot); ctx.stroke();
+    } else if(style==='line'){
+      const n = 64, vals = smoothBands(bands(n), 1);
+      const pts = vals.map((v,i) => [-w/2 + i/(n-1)*w, h/2 - v*h*0.9]);
+      ctx.lineWidth = Math.max(2, w*0.005); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath(); smoothPath(pts); ctx.stroke();
     } else if(style==='wave'){
       ctx.beginPath();
-      ctx.strokeStyle = color;
       ctx.lineWidth = Math.max(2,w*0.004);
       const slice = w/timeData.length;
       let x = -w/2;
@@ -1377,18 +1611,29 @@
       }
       ctx.stroke();
     } else if(style==='circular'){
-      const radius = Math.min(w,h)*0.22;
+      // elipse: si se estira el espectrómetro, el anillo se estira con él
       const barCount = 72;
-      ctx.strokeStyle = color; ctx.lineWidth = Math.max(2,w*0.006);
+      ctx.lineWidth = Math.max(2,w*0.006);
       for(let i=0;i<barCount;i++){
         const freq = logFreqForBar(i, barCount, minF, maxF);
-        const v = bandValue(freq);
-        const len = v*radius*1.4;
+        const v = bandValue(freq, barCount);
+        const f0 = 0.22, f1 = 0.22 + v*0.308;
         const angle = (i/barCount)*Math.PI*2;
-        const x1 = Math.cos(angle)*radius, y1 = Math.sin(angle)*radius;
-        const x2 = Math.cos(angle)*(radius+len), y2 = Math.sin(angle)*(radius+len);
-        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        const c = Math.cos(angle), sn = Math.sin(angle);
+        ctx.beginPath(); ctx.moveTo(c*w*f0, sn*h*f0); ctx.lineTo(c*w*f1, sn*h*f1); ctx.stroke();
       }
+    } else if(style==='circwave'){
+      const nb = 48, vals = smoothBands(bands(nb), 2), N = 120, pts = [];
+      for(let i=0;i<N;i++){
+        const t = i/N, ang = -Math.PI/2 + t*Math.PI*2;
+        const m = t < 0.5 ? t*2 : (1-t)*2;               // simétrico: sin "costura" a la izquierda/derecha
+        const idx = m*(nb-1), i0 = Math.floor(idx), i1 = Math.min(nb-1, i0+1), fr = idx - i0;
+        const f = 0.22 + (vals[i0]*(1-fr) + vals[i1]*fr)*0.308;
+        pts.push([Math.cos(ang)*w*f, Math.sin(ang)*h*f]);
+      }
+      ctx.beginPath(); smoothClosed(pts);
+      ctx.fillStyle = hexToRgba(color, 0.22); ctx.fill();
+      ctx.lineWidth = Math.max(2, w*0.006); ctx.lineJoin = 'round'; ctx.stroke();
     }
     ctx.restore();
   }
@@ -1410,8 +1655,7 @@
 
     if(canvasSelection && canvasSelection.type === 'clip'){
       const c = clips.find(cc => cc.id === canvasSelection.id);
-      const av = c ? activeClip(c.track, playhead) : null;
-      if(c && (c.type==='video' || c.type==='image' || c.type==='text') && av && av.id === c.id){
+      if(c && (c.type==='video' || c.type==='image') && isClipActive(c)){
         transform = c.transform;
         const bs = getVisualBaseSize(c); baseW = bs.w; baseH = bs.h;
       }
@@ -1425,9 +1669,10 @@
 
     if(!transform || !canvas.clientWidth){ box.classList.add('hidden'); return; }
     box.classList.remove('hidden');
+    box.classList.toggle('no-edges', !(canvasSelection && canvasSelection.type === 'spectrum'));
     const ratio = canvas.clientWidth / canvas.width;
-    const w = baseW*transform.scale*ratio;
-    const h = baseH*transform.scale*ratio;
+    const w = baseW*transform.scale*(transform.scaleX||1)*ratio;
+    const h = baseH*transform.scale*(transform.scaleY||1)*ratio;
     const cx = transform.x*canvas.width*ratio;
     const cy = transform.y*canvas.height*ratio;
     box.style.width = w + 'px';
@@ -1444,24 +1689,10 @@
       h.addEventListener('mousedown', e => { e.stopPropagation(); startBoxDrag('resize', e); });
     });
     box.querySelector('.handle-rotate').addEventListener('mousedown', e => { e.stopPropagation(); startBoxDrag('rotate', e); });
+    box.querySelectorAll('.handle-edge').forEach(h => {
+      h.addEventListener('mousedown', e => { e.stopPropagation(); startBoxDrag('edge-' + h.dataset.edge, e); });
+    });
   }
-
-  /* ---- Anclaje (snapping) a simetrías del lienzo y a otros elementos ---- */
-  const SNAP_DIST = 0.012; // fracción del lienzo
-  function collectSnapTargets(excludeTransform){
-    const xs = [0, 0.5, 1], ys = [0, 0.5, 1];
-    const addFrom = tr => { if(tr && tr !== excludeTransform){ xs.push(tr.x); ys.push(tr.y); } };
-    tracksOfType('video').forEach(td => { const c = activeClip(td.key, playhead); if(c) addFrom(c.transform); });
-    tracksOfType('text').forEach(td => { const c = activeClip(td.key, playhead); if(c) addFrom(c.transform); });
-    if(document.getElementById('spectrumEnabled').checked) addFrom(spectrumTransform);
-    return { xs, ys };
-  }
-  function showGuides(xFrac, yFrac){
-    const gv = document.getElementById('guideV'), gh = document.getElementById('guideH');
-    if(xFrac !== null){ gv.style.left = (xFrac*100)+'%'; gv.classList.remove('hidden'); } else gv.classList.add('hidden');
-    if(yFrac !== null){ gh.style.top = (yFrac*100)+'%'; gh.classList.remove('hidden'); } else gh.classList.add('hidden');
-  }
-  function hideGuides(){ document.getElementById('guideV').classList.add('hidden'); document.getElementById('guideH').classList.add('hidden'); }
 
   function startBoxDrag(mode, e){
     const transform = getCurrentTransformTarget();
@@ -1469,6 +1700,8 @@
     const rect = canvas.getBoundingClientRect();
     const ratio = canvas.clientWidth / canvas.width;
     const orig = Object.assign({}, transform);
+    const spBase = (canvasSelection && canvasSelection.type === 'spectrum')
+      ? getSpectrumBaseSize(document.getElementById('spectrumStyle').value) : null;
     const centerClientX = rect.left + transform.x*canvas.width*ratio;
     const centerClientY = rect.top + transform.y*canvas.height*ratio;
     const d0 = Math.hypot(e.clientX-centerClientX, e.clientY-centerClientY) || 1;
@@ -1478,36 +1711,39 @@
       if(mode === 'move'){
         const dxFrac = ((ev.clientX-startX)/ratio)/canvas.width;
         const dyFrac = ((ev.clientY-startY)/ratio)/canvas.height;
-        let nx = orig.x + dxFrac, ny = orig.y + dyFrac;
-        const { xs, ys } = collectSnapTargets(transform);
-        let snapX = null, snapY = null;
-        for(const gx of xs){ if(Math.abs(nx-gx) < SNAP_DIST){ nx = gx; snapX = gx; break; } }
-        for(const gy of ys){ if(Math.abs(ny-gy) < SNAP_DIST){ ny = gy; snapY = gy; break; } }
-        transform.x = nx; transform.y = ny;
-        showGuides(snapX, snapY);
+        transform.x = orig.x + dxFrac;
+        transform.y = orig.y + dyFrac;
       } else if(mode === 'resize'){
-        hideGuides();
         const d1 = Math.hypot(ev.clientX-centerClientX, ev.clientY-centerClientY) || 1;
         transform.scale = Math.max(0.05, orig.scale*(d1/d0));
       } else if(mode === 'rotate'){
-        hideGuides();
-        let rot = Math.round(Math.atan2(ev.clientY-centerClientY, ev.clientX-centerClientX)*180/Math.PI + 90);
-        const norm = ((rot % 360) + 360) % 360;
-        const snaps = [0,45,90,135,180,225,270,315,360];
-        let best = snaps[0], bestDiff = Infinity;
-        snaps.forEach(s => { const d = Math.abs(s-norm); if(d<bestDiff){ bestDiff=d; best=s; } });
-        if(bestDiff < 4) rot += (best - norm);
-        transform.rotation = rot;
+        const ang = Math.atan2(ev.clientY-centerClientY, ev.clientX-centerClientX)*180/Math.PI;
+        transform.rotation = Math.round(ang+90);
+      } else if(mode.indexOf('edge-') === 0 && spBase){
+        // Estirar un lado: el lado opuesto se queda fijo (cuenta con la rotación del espectrómetro)
+        const edge = mode.slice(5);
+        const axisX = (edge === 'e' || edge === 'w');
+        const sign = (edge === 'e' || edge === 's') ? 1 : -1;
+        const th = orig.rotation*Math.PI/180;
+        const ux = axisX ? Math.cos(th) : -Math.sin(th);
+        const uy = axisX ? Math.sin(th) :  Math.cos(th);
+        const d = ((ev.clientX-startX)*ux + (ev.clientY-startY)*uy) / ratio;   // desplazamiento en px del lienzo
+        const baseSize = axisX ? spBase.w*orig.scale : spBase.h*orig.scale;
+        const size0 = baseSize*(axisX ? (orig.scaleX||1) : (orig.scaleY||1));
+        const newSize = Math.max(Math.max(6, baseSize*0.05), size0 + sign*d);
+        const shift = sign*(newSize - size0)/2;
+        if(axisX) transform.scaleX = newSize/baseSize; else transform.scaleY = newSize/baseSize;
+        transform.x = orig.x + shift*ux/canvas.width;
+        transform.y = orig.y + shift*uy/canvas.height;
       }
+      if(spBase) syncSpectrumControls();
       updateSelectionOverlay();
     }
     function onUp(){
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      hideGuides();
       renderProperties();
       updateSelectionOverlay();
-      pushHistory();
     }
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -1526,50 +1762,96 @@
 
   const allMediaEls = () => mediaLibrary.filter(m=>m.type!=='image').map(m=>m.el);
 
+  /* ---------------- Reproducción: un elemento propio por clip ----------------
+     Antes, todos los clips que apuntaban al mismo archivo compartían el mismo
+     <video>/<audio> de fondo. Al pasar de un clip a otro (aunque fuera el
+     mismo archivo repetido), ese único elemento tenía que saltar (seek) de
+     golpe a la nueva posición, y ese salto tarda unos cientos de ms en
+     decodificar -> el fotograma negro que se ve entre clips.
+     Ahora cada clip de la línea de tiempo tiene su propio elemento dedicado
+     (clonado del mismo archivo), así nunca compite por la misma posición de
+     reproducción y no hace falta saltar en el momento del corte. */
+  function getClipPlaybackEl(clip, m){
+    if(clip._pel) return clip._pel;
+    const el = document.createElement(m.type === 'video' ? 'video' : 'audio');
+    el.src = m.url;
+    el.preload = 'auto';
+    el.playsInline = true;
+    el.muted = false;
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    attachAudioGraph(el);
+    clip._pel = el;
+    return el;
+  }
+
+  const LOOKAHEAD_SECONDS = 0.6;
+  function prewarmUpcomingClips(){
+    clips.forEach(c => {
+      if(c.type !== 'video' && c.type !== 'audio') return;
+      if(c.start > playhead && c.start - playhead <= LOOKAHEAD_SECONDS){
+        const m = mediaLibrary.find(mm => mm.id === c.mediaId);
+        if(m && m.type !== 'image'){
+          const el = getClipPlaybackEl(c, m);
+          if(c.type === 'audio') applyClipGain(c, el, c.start);
+          // deja el elemento ya posicionado y "calentado" antes de que le toque salir
+          if(el.readyState >= 1 && el.paused && Math.abs(el.currentTime - c.trimStart) > 0.05){
+            try{ el.currentTime = c.trimStart; }catch(e){}
+          }
+        }
+      }
+    });
+  }
+
   function renderPreviewFrame(){
     const w = canvas.width, h = canvas.height;
     ctx.fillStyle = '#000';
     ctx.fillRect(0,0,w,h);
 
-    const activeIds = new Set();
+    prewarmUpcomingClips();
 
-    // Pistas de vídeo/imagen: la que está más arriba en la lista de pistas queda delante (encima)
-    tracksOfType('video').filter(td => td.enabled!==false).slice().reverse().forEach(td => {
-      const c = activeClip(td.key, playhead);
-      if(!c) return;
-      const m = mediaLibrary.find(mm=>mm.id===c.mediaId);
-      if(!m) return;
-      if(m.type==='video'){
-        const desired = c.trimStart + (playhead - c.start);
-        syncMediaEl(m.el, desired, isPlaying);
-        activeIds.add(m.id);
-        if(m.el.readyState >= 2) drawVisualClip(c, m);
-      } else if(m.type==='image'){
-        drawVisualClip(c, m);
+    const activeText = activeClip('text', playhead);
+
+    const activeEls = new Set();
+
+    // capas visuales: de la de más abajo a la de más arriba (la de arriba queda delante)
+    const visualTracks = tracksOfKind('visual');
+    for(let i = visualTracks.length - 1; i >= 0; i--){
+      const vc = activeClip(visualTracks[i].id, playhead);
+      if(!vc) continue;
+      const m = mediaLibrary.find(mm => mm.id === vc.mediaId);
+      if(!m) continue;
+      if(m.type === 'video'){
+        const el = getClipPlaybackEl(vc, m);
+        const desired = vc.trimStart + (playhead - vc.start);
+        syncMediaEl(el, desired, isPlaying);
+        activeEls.add(el);
+        if(el.readyState >= 2) drawVisualClip(vc, m, el);
+      } else if(m.type === 'image'){
+        drawVisualClip(vc, m);
       }
-    });
+    }
 
-    // Pistas de audio: todas las activas (y con el switch encendido) suenan mezcladas a la vez
-    tracksOfType('audio').filter(td => td.enabled!==false).forEach(td => {
-      const c = activeClip(td.key, playhead);
-      if(!c) return;
-      const m = mediaLibrary.find(mm=>mm.id===c.mediaId);
+    // pistas de audio: suenan todas a la vez, cada clip con su volumen/curva
+    tracksOfKind('audio').forEach(tr => {
+      const ac = activeClip(tr.id, playhead);
+      if(!ac) return;
+      const m = mediaLibrary.find(mm => mm.id === ac.mediaId);
       if(!m) return;
-      const desired = c.trimStart + (playhead - c.start);
-      syncMediaEl(m.el, desired, isPlaying);
-      activeIds.add(m.id);
+      const el = getClipPlaybackEl(ac, m);
+      applyClipGain(ac, el);
+      const desired = ac.trimStart + (playhead - ac.start);
+      syncMediaEl(el, desired, isPlaying);
+      activeEls.add(el);
+    });
+    // pausa cualquier elemento de clip que no esté activo ahora mismo
+    clips.forEach(c => {
+      if(c._pel && !activeEls.has(c._pel) && !c._pel.paused) c._pel.pause();
     });
 
-    // pause all other media
-    mediaLibrary.forEach(m => {
-      if(m.type!=='image' && !activeIds.has(m.id) && m.el && !m.el.paused) m.el.pause();
-    });
-
-    // Pistas de texto: igual, arriba en la lista = delante
-    tracksOfType('text').filter(td => td.enabled!==false).slice().reverse().forEach(td => {
-      const c = activeClip(td.key, playhead);
-      if(c) drawTextClip(c);
-    });
+    if(activeText){
+      drawTextClip(activeText, w, h);
+    }
 
     if(document.getElementById('spectrumEnabled').checked && analyser){
       const bs = getSpectrumBaseSize(document.getElementById('spectrumStyle').value);
@@ -1577,25 +1859,22 @@
     }
   }
 
-  function drawTextClip(c){
-    if(!c.transform) c.transform = { x:0.5, y:0.88, scale:1, rotation:0, opacity:1 };
-    const bs = measureTextBase(c);
-    compositeVisual((w,h) => {
-      const scaleFactor = w / bs.w;
-      ctx.save();
-      ctx.scale(scaleFactor, scaleFactor);
-      ctx.font = `600 ${c.fontSize}px ${c.fontFamily}`;
-      ctx.fillStyle = c.color;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,.6)';
-      ctx.shadowBlur = 6;
-      const lines = c.text.split('\n');
-      const lineH = c.fontSize*1.15;
-      const startY = -((lines.length-1)*lineH)/2;
-      lines.forEach((line,i) => { ctx.fillText(line, 0, startY + i*lineH); });
-      ctx.restore();
-    }, bs.w, bs.h, c.transform);
+  function drawTextClip(c, w, h){
+    ctx.save();
+    ctx.font = `600 ${c.fontSize}px ${c.fontFamily}`;
+    ctx.fillStyle = c.color;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,.6)';
+    ctx.shadowBlur = 6;
+    let y;
+    if(c.position==='top') y = h*0.14;
+    else if(c.position==='center') y = h*0.52;
+    else y = h*0.88;
+    const lines = c.text.split('\n');
+    lines.forEach((line,i) => {
+      ctx.fillText(line, w/2, y + i*(c.fontSize*1.15));
+    });
+    ctx.restore();
   }
 
   /* ---------------- Main loop ---------------- */
@@ -1612,11 +1891,13 @@
         document.getElementById('btnPlayPause').textContent = '▶';
         document.getElementById('playOverlayBtn').textContent = '▶';
         allMediaEls().forEach(el => el && el.pause());
+        clips.forEach(c => { if(c._pel && !c._pel.paused) c._pel.pause(); });
       }
       positionPlayhead();
     }
     renderPreviewFrame();
     updateSelectionOverlay();
+    if(envEditor) envEditor.draw();
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
@@ -1698,6 +1979,17 @@
   document.getElementById('s-tscale').addEventListener('input', e => { spectrumTransform.scale = Math.max(0.05, parseFloat(e.target.value)/100); updateSelectionOverlay(); });
   document.getElementById('s-trot').addEventListener('input', e => { spectrumTransform.rotation = parseFloat(e.target.value)||0; updateSelectionOverlay(); });
   document.getElementById('s-topacity').addEventListener('input', e => { spectrumTransform.opacity = parseFloat(e.target.value)/100; });
+  document.getElementById('s-tsx').addEventListener('input', e => { spectrumTransform.scaleX = Math.max(0.05, parseFloat(e.target.value)/100); updateSelectionOverlay(); });
+  document.getElementById('s-tsy').addEventListener('input', e => { spectrumTransform.scaleY = Math.max(0.05, parseFloat(e.target.value)/100); updateSelectionOverlay(); });
+
+  // mantiene los controles de la barra lateral al día cuando se arrastra en el lienzo
+  function syncSpectrumControls(){
+    const t = spectrumTransform, set = (id,v) => { document.getElementById(id).value = v; };
+    set('s-tx', Math.round(t.x*100)); set('s-ty', Math.round(t.y*100));
+    set('s-tscale', Math.round(t.scale*100));
+    set('s-tsx', Math.round((t.scaleX||1)*100)); set('s-tsy', Math.round((t.scaleY||1)*100));
+    set('s-trot', Math.round(t.rotation));
+  }
 
   document.getElementById('btnEditSpectrum').addEventListener('click', () => {
     const btn = document.getElementById('btnEditSpectrum');
@@ -1713,17 +2005,53 @@
     updateSelectionOverlay();
   });
 
+  /* ---------------- Deshacer / rehacer (Ctrl+Z / Ctrl+Alt+Z) ----------------
+     Guarda "fotos" de clips + pistas + espectro. Detecta los cambios solo, sin tocar
+     cada acción: tras cualquier clic/arrastre/edición espera 350 ms y, si el estado
+     cambió, lo apila (un arrastre largo o un slider = un solo paso). */
+  const hist = { undo:[], redo:[], last:null };
+  const snap = () => JSON.stringify({
+    clips: clips.map(c => { const o = Object.assign({}, c); delete o._pel; delete o._tempStart; delete o._tempDur; delete o._tempTrim; return o; }),
+    tracks, counter:Object.assign({}, trackCounter), target:Object.assign({}, targetTrack), spectrum:Object.assign({}, spectrumTransform)
+  });
+  function commitHistory(){
+    const cur = snap();
+    if(cur === hist.last) return;
+    hist.undo.push(hist.last); hist.redo.length = 0; hist.last = cur;
+    if(hist.undo.length > 100) hist.undo.shift();
+  }
+  function restoreSnapshot(str){
+    const st = JSON.parse(str), old = new Map(clips.map(c => [c.id, c]));
+    clips = st.clips.map(c => { const o = old.get(c.id); if(o && o._pel) c._pel = o._pel; return c; });
+    old.forEach((o,id) => { if(o._pel && !clips.some(c => c.id === id)){ o._pel.pause(); o._pel.remove(); } });
+    tracks = st.tracks; Object.assign(trackCounter, st.counter); Object.assign(targetTrack, st.target);
+    Object.assign(spectrumTransform, st.spectrum); syncSpectrumControls();
+    if(!clips.some(c => c.id === selectedClipId)){ selectedClipId = null; if(canvasSelection && canvasSelection.type==='clip') canvasSelection = null; }
+    hist.last = str;
+    renderTimeline(); renderProperties(); updateActionButtons(); updateSelectionOverlay();
+  }
+  function undo(){ commitHistory(); if(!hist.undo.length) return; hist.redo.push(hist.last); restoreSnapshot(hist.undo.pop()); }
+  function redo(){ commitHistory(); if(!hist.redo.length) return; hist.undo.push(hist.last); restoreSnapshot(hist.redo.pop()); }
+  let commitTimer = null;
+  ['mouseup','input','change','keyup','click'].forEach(ev =>
+    document.addEventListener(ev, () => { clearTimeout(commitTimer); commitTimer = setTimeout(commitHistory, 350); }, true));
+  document.addEventListener('keydown', e => {
+    if(!(e.ctrlKey || e.metaKey) || e.code !== 'KeyZ') return;
+    const t = e.target;
+    // dentro de un campo de texto/número se deja el deshacer nativo del navegador
+    if(t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !['range','checkbox','color','button'].includes(t.type))) return;
+    e.preventDefault();
+    if(e.altKey) redo(); else undo();
+  });
+
   /* ---------------- Init ---------------- */
-  addTrack('video', true);
-  addTrack('text', true);
-  addTrack('audio', true);
   applyOrientation(document.getElementById('canvasOrientation').value);
   attachSelBoxEvents();
   renderTimeline();
   renderProperties();
   updateActionButtons();
   updateSelectionOverlay();
-  pushHistory();
+  hist.last = snap();
 
 })();
 </script>
