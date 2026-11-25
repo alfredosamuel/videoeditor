@@ -199,6 +199,10 @@
       <button id="btnAddText">+ Texto</button>
       <button id="btnSplit">✂ Cortar en cabezal</button>
       <button id="btnDelete" class="danger">🗑 Eliminar clip</button>
+      <span style="width:1px;height:22px;background:var(--line);align-self:center;"></span>
+      <button id="btnSaveProject" title="Guarda la edición en un archivo para seguir más tarde">💾 Guardar</button>
+      <button id="btnLoadProject" title="Abre un proyecto guardado antes">📂 Cargar</button>
+      <input type="file" id="projectInput" accept=".json,application/json" style="display:none;">
     </div>
     <div class="spacer"></div>
     <div id="timecode">00:00.0 / 00:00.0</div>
@@ -638,8 +642,12 @@
       else if(file.type.startsWith('audio/')) type='audio';
       if(!type) return;
 
-      const item = { id:newId(), type, name:file.name, url, el:null, file, naturalDuration:5, width:16, height:9 };
-      mediaLibrary.push(item);
+      // si es un archivo que faltaba al cargar un proyecto (mismo nombre), se reconecta a esa entrada
+      const miss = mediaLibrary.filter(x => x.missing && x.type === type && x.name === file.name);
+      const found = miss.find(x => x.size === file.size) || miss[0];
+      const item = found || { id:newId(), type, name:file.name, naturalDuration:5, width:16, height:9 };
+      Object.assign(item, { url, el:null, file, size:file.size, missing:false, loadError:false });
+      if(!found) mediaLibrary.push(item);
 
       if(type==='video'){
         const v = document.createElement('video');
@@ -696,6 +704,8 @@
       row.className = 'media-item ' + m.type;
       const durLabel = m.converting
         ? '⏳ convirtiendo con FFmpeg…'
+        : m.missing
+          ? '⚠️ falta el archivo: vuelve a añadirlo'
         : m.loadError
           ? '⚠️ formato no soportado por el navegador'
           : (m.type==='image' ? 'imagen' : fmtTime(m.naturalDuration));
@@ -705,10 +715,10 @@
         <div class="icon">${ICONS[m.type]}</div>
         <div class="meta">
           <div class="name" title="${escapeHtml(m.name)}">${escapeHtml(m.name)}</div>
-          <div class="dur" style="${m.loadError?'color:var(--danger);':''}">${durLabel}</div>
+          <div class="dur" style="${(m.loadError||m.missing)?'color:var(--danger);':''}">${durLabel}</div>
         </div>
         ${convertBtn}
-        <button title="Añadir a la línea de tiempo" ${(m.loadError||m.converting)?'disabled':''}>+</button>
+        <button title="Añadir a la línea de tiempo" ${(m.loadError||m.converting||m.missing)?'disabled':''}>+</button>
       `;
       row.querySelector('button[title="Añadir a la línea de tiempo"]').addEventListener('click', () => addMediaToTimeline(m));
       const cBtn = row.querySelector('.btn-convert');
@@ -1791,7 +1801,7 @@
       if(c.type !== 'video' && c.type !== 'audio') return;
       if(c.start > playhead && c.start - playhead <= LOOKAHEAD_SECONDS){
         const m = mediaLibrary.find(mm => mm.id === c.mediaId);
-        if(m && m.type !== 'image'){
+        if(m && !m.missing && m.type !== 'image'){
           const el = getClipPlaybackEl(c, m);
           if(c.type === 'audio') applyClipGain(c, el, c.start);
           // deja el elemento ya posicionado y "calentado" antes de que le toque salir
@@ -1820,7 +1830,7 @@
       const vc = activeClip(visualTracks[i].id, playhead);
       if(!vc) continue;
       const m = mediaLibrary.find(mm => mm.id === vc.mediaId);
-      if(!m) continue;
+      if(!m || m.missing) continue;
       if(m.type === 'video'){
         const el = getClipPlaybackEl(vc, m);
         const desired = vc.trimStart + (playhead - vc.start);
@@ -1837,7 +1847,7 @@
       const ac = activeClip(tr.id, playhead);
       if(!ac) return;
       const m = mediaLibrary.find(mm => mm.id === ac.mediaId);
-      if(!m) return;
+      if(!m || m.missing) return;
       const el = getClipPlaybackEl(ac, m);
       applyClipGain(ac, el);
       const desired = ac.trimStart + (playhead - ac.start);
@@ -2043,6 +2053,91 @@
     e.preventDefault();
     if(e.altKey) redo(); else undo();
   });
+
+  /* ---------------- Guardar / cargar proyecto ----------------
+     El archivo guarda la EDICIÓN (clips, pistas, curvas de volumen, espectro, formato)
+     y la lista de medios (nombre, tipo, tamaño), pero no los vídeos/imágenes/audios
+     en sí. Al cargar, los medios quedan como "faltan" y se reconectan solos en cuanto
+     vuelves a añadir archivos con el mismo nombre. */
+  const gid = id => document.getElementById(id);
+
+  function saveProject(){
+    commitHistory();
+    const data = Object.assign(JSON.parse(snap()), {
+      app:'editor-video', version:1, savedAt:new Date().toISOString(),
+      orientation: gid('canvasOrientation').value,
+      spectrumUi: { enabled:gid('spectrumEnabled').checked, style:gid('spectrumStyle').value,
+                    color:gid('spectrumColor').value, curve:gid('spectrumAuditoryCurve').checked },
+      playhead, nextId:uidCounter,
+      media: mediaLibrary.map(m => ({ id:m.id, type:m.type, name:m.name, size:m.size||0,
+                                      duration:m.naturalDuration, width:m.width, height:m.height }))
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type:'application/json' }));
+    const d = new Date(), p2 = n => String(n).padStart(2,'0');
+    a.download = 'proyecto-' + d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + '.editorvideo.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  async function loadProject(file){
+    let data;
+    try{
+      data = JSON.parse(await new Promise((res, rej) => {
+        const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(file);
+      }));
+    }catch(e){ alert('El archivo no es un proyecto válido.'); return; }
+    if(!data || data.app !== 'editor-video' || !Array.isArray(data.clips) || !Array.isArray(data.tracks) || !Array.isArray(data.media)){
+      alert('Este archivo no parece un proyecto de este editor.'); return;
+    }
+    if((clips.length || mediaLibrary.length) && !confirm('Cargar un proyecto reemplaza el actual (lo que no hayas guardado se perderá). ¿Continuar?')) return;
+
+    // detener y limpiar lo actual
+    if(isPlaying) togglePlay();
+    clips.forEach(c => { if(c._pel){ c._pel.pause(); c._pel.remove(); } });
+    mediaLibrary.forEach(m => {
+      if(m.el && m.el.remove){ try{ if(m.el.pause) m.el.pause(); }catch(e){} m.el.remove(); }
+      if(m.url) URL.revokeObjectURL(m.url);
+    });
+    mediaLibrary.length = 0;
+
+    // restaurar la edición
+    data.media.forEach(m => mediaLibrary.push({ id:m.id, type:m.type, name:m.name, size:m.size||0, url:null, el:null, file:null,
+      naturalDuration:m.duration||5, width:m.width||16, height:m.height||9, missing:true }));
+    clips = data.clips; tracks = data.tracks;
+    Object.assign(trackCounter, data.counter || {}); Object.assign(targetTrack, data.target || {});
+    ['visual','text','audio'].forEach(k => {
+      if(!tracks.some(t => t.kind === k)) tracks.push({ id:(k==='visual' ? 'video' : k), kind:k, name:(k==='visual' ? 'Capa 1' : k==='text' ? 'Texto' : 'Audio 1') });
+    });
+    ['visual','audio'].forEach(k => { if(!getTrack(targetTrack[k])) targetTrack[k] = tracksOfKind(k)[0].id; });
+    Object.assign(spectrumTransform, data.spectrum || {});
+    uidCounter = Math.max(uidCounter, data.nextId || 1);
+
+    gid('canvasOrientation').value = data.orientation || '16:9'; applyOrientation(gid('canvasOrientation').value);
+    const u = data.spectrumUi || {};
+    gid('spectrumEnabled').checked = !!u.enabled;
+    if(u.style) gid('spectrumStyle').value = u.style;
+    if(u.color) gid('spectrumColor').value = u.color;
+    gid('spectrumAuditoryCurve').checked = u.curve !== false;
+    syncSpectrumControls();
+    gid('s-topacity').value = Math.round((spectrumTransform.opacity == null ? 1 : spectrumTransform.opacity) * 100);
+
+    selectedClipId = null; canvasSelection = null;
+    hist.undo.length = 0; hist.redo.length = 0; hist.last = snap();
+    renderMediaList(); renderTimeline(); renderProperties(); updateActionButtons(); updateSelectionOverlay();
+    seekTo(Math.max(0, data.playhead || 0));
+
+    const missing = mediaLibrary.filter(m => m.missing);
+    if(missing.length){
+      alert('Proyecto cargado.\n\nEl proyecto guarda la edición, no los archivos. Faltan ' + missing.length + ':\n• ' +
+        missing.map(m => m.name).join('\n• ') +
+        '\n\nVuelve a añadirlos en "Añadir medios" (arrastrándolos o eligiéndolos): se reconectan solos por nombre.');
+    }
+  }
+
+  gid('btnSaveProject').addEventListener('click', saveProject);
+  gid('btnLoadProject').addEventListener('click', () => gid('projectInput').click());
+  gid('projectInput').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if(f) loadProject(f); });
 
   /* ---------------- Init ---------------- */
   applyOrientation(document.getElementById('canvasOrientation').value);
