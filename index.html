@@ -192,6 +192,14 @@
   .snap-guide{position:absolute;background:var(--accent);opacity:.9;pointer-events:none;display:none;}
   .snap-guide.v{top:0;bottom:0;width:1px;margin-left:-.5px;}
   .snap-guide.h{left:0;right:0;height:1px;margin-top:-.5px;}
+
+  /* Menú contextual de clips */
+  .ctx-menu{position:fixed;z-index:1000;min-width:210px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.45);display:none;font-size:12.5px;}
+  .ctx-item{padding:7px 12px;border-radius:5px;cursor:pointer;}
+  .ctx-item:hover{background:rgba(79,209,197,.14);}
+  .ctx-item.disabled{opacity:.45;cursor:default;pointer-events:none;}
+  .ctx-item small{display:block;color:var(--muted);font-size:11px;margin-top:2px;}
 </style>
 </head>
 <body>
@@ -370,6 +378,7 @@
 
 </div>
 
+<div id="clipMenu" class="ctx-menu"></div>
 <script>
 (function(){
   "use strict";
@@ -1291,8 +1300,53 @@
   }
 
   /* ---- Clip dragging (move / trim) ---- */
+  /* ---------------- Menú contextual: "Extender hasta el final" ---------------- */
+  // Hasta dónde puede llegar un clip: el final del proyecto, sin pisar al clip siguiente de su pista
+  // y sin pasar de la duración real del archivo (vídeo/audio).
+  function extendInfo(c){
+    const projectEnd = Math.max.apply(null, clips.map(o => o.start + o.duration));
+    let limit = projectEnd, why = '';
+    const next = clipsOnTrack(c.track).find(o => o.id !== c.id && o.start >= c.start + c.duration - 1e-6);
+    if(next && next.start < limit){ limit = next.start; why = 'hasta el clip siguiente'; }
+    if(c.type === 'video' || c.type === 'audio'){
+      const m = mediaLibrary.find(mm => mm.id === c.mediaId);
+      const src = m ? c.start + (m.naturalDuration - c.trimStart) : limit;
+      if(src < limit){ limit = src; why = 'el archivo dura menos'; }
+    }
+    return { limit, why, projectEnd, can: limit > c.start + c.duration + 0.01 };
+  }
+  function openClipMenu(x, y, id){
+    const c = clips.find(cc => cc.id === id), menu = document.getElementById('clipMenu');
+    if(!c) return;
+    const info = extendInfo(c);
+    let hint;
+    if(c.start + c.duration >= info.projectEnd - 0.01) hint = 'ya llega al final';
+    else if(!info.can) hint = info.why === 'hasta el clip siguiente' ? 'hay otro clip justo después' : 'el archivo no dura más';
+    else hint = 'llegará a ' + fmtTime(info.limit).slice(0,8) + (info.why ? ' (' + info.why + ')' : '');
+    menu.innerHTML = '<div class="ctx-item' + (info.can ? '' : ' disabled') + '" id="ctxExtend">Extender hasta el final<small>' + hint + '</small></div>';
+    menu.style.display = 'block';
+    menu.style.left = Math.min(x, window.innerWidth - menu.offsetWidth - 8) + 'px';
+    menu.style.top  = Math.min(y, window.innerHeight - menu.offsetHeight - 8) + 'px';
+    document.getElementById('ctxExtend').addEventListener('click', () => {
+      const cur = clips.find(cc => cc.id === id);
+      if(cur){ const inf = extendInfo(cur); if(inf.can){ cur.duration = inf.limit - cur.start; renderTimeline(); renderProperties(); } }
+      closeClipMenu();
+    });
+  }
+  function closeClipMenu(){ document.getElementById('clipMenu').style.display = 'none'; }
+  document.addEventListener('mousedown', e => { if(!e.target.closest || !e.target.closest('#clipMenu')) closeClipMenu(); }, true);
+  document.addEventListener('keydown', e => { if(e.key === 'Escape') closeClipMenu(); });
+  window.addEventListener('blur', closeClipMenu);
+  document.getElementById('timelineScroll').addEventListener('scroll', closeClipMenu);
+
   function attachClipDrag(el, clip){
+    el.addEventListener('contextmenu', e => {
+      e.preventDefault(); e.stopPropagation();
+      selectClip(clip.id);
+      openClipMenu(e.clientX, e.clientY, clip.id);
+    });
     el.addEventListener('mousedown', e => {
+      if(e.button !== 0){ e.stopPropagation(); return; }
       e.stopPropagation();
       selectClip(clip.id);   // vuelve a dibujar la línea de tiempo: seguimos con el elemento nuevo
       const fresh = trackEls[clip.track] && trackEls[clip.track].querySelector('.clip[data-id="' + clip.id + '"]');
